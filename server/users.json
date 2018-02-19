@@ -1,0 +1,23 @@
+[
+  {
+    "name": "admin",
+    "role": "admin",
+    "_id": "352bd835-07be-44f1-96e4-c482dc818d6f",
+    "salt": "FrVqgAnK5xtotktXoLEqZA==",
+    "hashedPassword": "tSH8BOyNI7jaHFN11nEl5z2PfGeQ48p9MQbzbGNXYn28kQ6lI6wKiGwawIi4zt7vB1MY47MYeF6wwpC5j5ukdw=="
+  },
+  {
+    "name": "user",
+    "role": "user",
+    "_id": "183a62a9-09b8-4fb1-8be4-e5798827c1f6",
+    "salt": "7D9F3Q0I7Bw+KbYTzOXHvw==",
+    "hashedPassword": "Vv05fT6xuKqtkhRzlaIYnnJTCUzsMgBUCIlCJh9rx8PTuIxvaJR4PJDRPsIG0erWJ4TLIypFEsd2fMOY/aSvsQ=="
+  },
+  {
+    "name": "guest",
+    "role": "guest",
+    "_id": "24abbdc5-0aa6-4bb5-bdf1-8ab0d0e4bb47",
+    "salt": "w/AA+dsIv2qRA20C9B8j7A==",
+    "hashedPassword": "ty3o7SYAzZZtkSXhYXW5jKzQRBu/gRtmVK/T5GbAHGAVtBiWKACrfCiqopi3aQTzDbSpZNiRYvhu31k+Pi4EWQ=="
+  }
+]

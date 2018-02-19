@@ -1,0 +1,8 @@
+node_modules
+.tmp
+.idea
+dist
+server/log
+server/store
+server/current.json
+npm-debug.log
