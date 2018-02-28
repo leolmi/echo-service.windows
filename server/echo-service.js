@@ -2345,7 +2345,7 @@ var router = express.Router();
 // elenco deli scenari
 router.get('/', controller.index);
 // elenco dei tags sui documenti
-router.get('/', controller.tags);
+router.get('/tags', controller.tags);
 // restituisce l'elenco dei documenti (solo info) dello scenario corrente
 // se è specificato il type restituisce l'elenco dei documenti (full) di quel tipo
 router.get('/documents/:type*?', auth.needAuthentication(controller.checkInfo), controller.docs);
