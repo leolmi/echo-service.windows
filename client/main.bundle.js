@@ -341,6 +341,7 @@ var AppComponent = (function () {
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_52__pages_help_pages_previews_help_component__ = __webpack_require__("../../../../../src/app/pages/help/pages/previews-help.component.ts");
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_53__pages_help_pages_custom_help_component__ = __webpack_require__("../../../../../src/app/pages/help/pages/custom-help.component.ts");
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_54__pages_help_pages_slowquery_help_component__ = __webpack_require__("../../../../../src/app/pages/help/pages/slowquery-help.component.ts");
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_55__components_fields_browser_fields_browser_component__ = __webpack_require__("../../../../../src/app/components/fields-browser/fields-browser.component.ts");
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -411,6 +412,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 
 
 
+
 var AppModule = (function () {
     function AppModule(matIconRegistry, domSanitizer) {
         // matIconRegistry.addSvgIconSet(domSanitizer.bypassSecurityTrustResourceUrl('./assets/mdi.svg'));
@@ -454,7 +456,8 @@ var AppModule = (function () {
                 __WEBPACK_IMPORTED_MODULE_31__components_api_tester_api_tester_component__["a" /* ApiTesterComponent */],
                 __WEBPACK_IMPORTED_MODULE_32__components_monitor_monitor_component__["a" /* MonitorComponent */],
                 __WEBPACK_IMPORTED_MODULE_46__pages_log_log_component__["a" /* LogComponent */],
-                __WEBPACK_IMPORTED_MODULE_34__directives_auto_scroll_directive__["a" /* AutoScrollDirective */]
+                __WEBPACK_IMPORTED_MODULE_34__directives_auto_scroll_directive__["a" /* AutoScrollDirective */],
+                __WEBPACK_IMPORTED_MODULE_55__components_fields_browser_fields_browser_component__["a" /* FieldsBrowserComponent */]
             ],
             imports: [
                 __WEBPACK_IMPORTED_MODULE_0__angular_platform_browser__["a" /* BrowserModule */],
@@ -874,6 +877,59 @@ var DebugPreComponent = (function () {
             __WEBPACK_IMPORTED_MODULE_2__services_user_settings_service__["a" /* UserSettingsService */]])
     ], DebugPreComponent);
     return DebugPreComponent;
+}());
+
+
+
+/***/ }),
+
+/***/ "../../../../../src/app/components/fields-browser/fields-browser.component.html":
+/***/ (function(module, exports) {
+
+module.exports = "<div class=\"schema-browser\">\n  <div class=\"header\">\n    <div class=\"title\">Fields</div>\n  </div>\n  <div #eschema class=\"schema-container echo-scrollbar\" lock-scroll>\n    <div class=\"schema-page-list\">\n      <div class=\"schema-page\" *ngFor=\"let f of ((browser.current||{}).columns||[])\" layout-row>\n        <mat-icon class=\"as-button\" aria-label=\"add button\" (click)=\"notifyAdd(f)\">add_circle_outline</mat-icon>\n        <span class=\"title\">{{f.name}}</span>\n      </div>\n    </div>\n  </div>\n</div>\n"
+
+/***/ }),
+
+/***/ "../../../../../src/app/components/fields-browser/fields-browser.component.ts":
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return FieldsBrowserComponent; });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__angular_core__ = __webpack_require__("../../../core/esm5/core.js");
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__services_browser_service__ = __webpack_require__("../../../../../src/app/services/browser.service.ts");
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+
+
+var FieldsBrowserComponent = (function () {
+    function FieldsBrowserComponent(browser) {
+        this.browser = browser;
+        this.insert = new __WEBPACK_IMPORTED_MODULE_0__angular_core__["EventEmitter"]();
+    }
+    FieldsBrowserComponent.prototype.ngOnInit = function () {
+    };
+    FieldsBrowserComponent.prototype.notifyAdd = function (field) {
+        this.insert.emit(field.name);
+    };
+    __decorate([
+        Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["Output"])(),
+        __metadata("design:type", __WEBPACK_IMPORTED_MODULE_0__angular_core__["EventEmitter"])
+    ], FieldsBrowserComponent.prototype, "insert", void 0);
+    FieldsBrowserComponent = __decorate([
+        Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["Component"])({
+            selector: 'app-fields-browser',
+            template: __webpack_require__("../../../../../src/app/components/fields-browser/fields-browser.component.html")
+        }),
+        __metadata("design:paramtypes", [__WEBPACK_IMPORTED_MODULE_1__services_browser_service__["a" /* BrowserService */]])
+    ], FieldsBrowserComponent);
+    return FieldsBrowserComponent;
 }());
 
 
@@ -2665,7 +2721,7 @@ var PreviewsHelpComponent = (function () {
 /***/ "../../../../../src/app/pages/help/pages/queries-help.component.html":
 /***/ (function(module, exports) {
 
-module.exports = "<div id=\"help-queries\">\n  <p>L'editor delle query prevede inanzi tutto la definizione delle proprietà di base:</p>\n  <img src=\"./assets/help/queries1.png\">\n  <p>Quali nome, descrizione, connessione di riferimento e flag di attività che se non spuntato\n    blocca l'esecuzione della stessa.</p>\n  <p>A seguire è mostrato l'elenco di parametri appartenenti alla query in una lista del tipo:</p>\n  <img src=\"./assets/help/queries2.png\">\n  <p>le azioni possibili su ogni parametro sono:</p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>star_border</mat-icon>\n    </button>\n    Aggiunge il parametro ai preferiti. In tal modo sarà possibile inserirne una copia in altre query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>play_for_work</mat-icon>\n    </button>\n    Inserisce il parametro nel punto della query selezionato o dove appare il cursore.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>edit</mat-icon>\n    </button>\n    Accede all'editor (popup) per la modifica del parametro.\n  </p>\n  <p>\n    <button color=\"warn\" mat-icon-button>\n      <mat-icon>delete</mat-icon>\n    </button>\n    Elimina il parametro.\n  </p>\n  <p>Di seguito poi il corpo del testo che descrive la query affiancato dall'utility per l'esplorazione\n    degli oggetti contenuti nel database:</p>\n  <img src=\"./assets/help/queries3.png\">\n  <p>Se la query è stata eseguita almeno una volta è presente lo schema. Questo viene mostrato come elenco di\n    campi con proprietà in una tabella del tipo:</p>\n  <img src=\"./assets/help/queries4.png\">\n  <p>Una volta eseguita la query, sono mostrate nella successiva sezione le statistiche di esecuzione:</p>\n  <ul>\n    <li>Tempo di esecuzione</li>\n    <li>Records totali</li>\n    <li>Numeri di campi</li>\n  </ul>\n  <img src=\"./assets/help/queries5.png\">\n  <p>Quindi lo script SQL realmente eseguito sullo specifico provider:</p>\n  <img src=\"./assets/help/queries6.png\">\n  <p>Ed infine i dati ricevuti dal servizio:</p>\n  <img src=\"./assets/help/queries7.png\">\n</div>\n<div id=\"help-queries-actions\">\n  <p>Azioni previste dall'editor:</p>\n  <img src=\"./assets/help/queries0.png\">\n  <p>\n    <button mat-icon-button>\n      <mat-icon>add_circle_outline</mat-icon>\n    </button>\n    Aggiunge una nuova query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>flash_on</mat-icon>\n    </button>\n    Esegue la query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>save</mat-icon>\n    </button>\n    Salva la query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>add_shopping_cart</mat-icon>\n    </button>\n    Aggiunge l'elemento selezionato all'elenco degli ogetti condivisibili.\n  </p>\n  <p>\n    <button mat-icon-button color=\"warn\">\n      <mat-icon>delete</mat-icon>\n    </button>\n    Elimina la query selezionata.\n  </p>\n</div>\n<div divider></div>\n<div id=\"help-queries-parameters\">\n  <h1>Editor di parametri</h1>\n  <p>L'editor dei parametri prevede 4 tipologie di parametro:</p>\n  <ul>\n    <li>\n      <h2>Normal</h2>\n      <img class=\"small\" src=\"./assets/help/queries9.png\">\n      <p>Parametro standard dove, una volta definito il tipo dato è possibile impostarne il valore di default e\n        corrente ed attribuirne le proprietà di opzionale o \"in sola lettura\"</p>\n    </li>\n    <li>\n      <h2>System</h2>\n      <img class=\"small\" src=\"./assets/help/queries8.png\">\n      <p>Parametro di sistema. Sono previsti attualmente due parametri di sistema impostabili dalla\n        proprietà <span highlight>System Type</span>.</p>\n      <p>Il valore è in sola lettura essendo calcolato lato server.</p>\n    </li>\n    <li>\n      <h2>List</h2>\n      <img class=\"small\" src=\"./assets/help/queries10.png\">\n      <p>Questo parametro prevede un elenco di valori possibili definiti dall'utente.</p>\n      <p>Prevede un'opzione in più rispetto ai parametri standard, cioè la multiselezione degli elementi.</p>\n    </li>\n    <li>\n      <h2>Lookup</h2>\n      <img class=\"small\" src=\"./assets/help/queries11.png\">\n      <p>Come la lista, prevede un elenco di valori possibili che questa volta sono determinati dall'esecuzione di\n        un'altra query esistente. Per la descrizione mostrata ed il valore devono quindi essere indicati i relativi\n        campi della query scelta.</p>\n      <p>Come la lista, prevede un'opzione in più rispetto ai parametri standard, cioè la multiselezione degli elementi.</p>\n    </li>\n  </ul>\n</div>\n"
+module.exports = "<div id=\"help-queries\">\n  <p>L'editor delle query prevede inanzi tutto la definizione delle proprietà di base:</p>\n  <img src=\"./assets/help/queries1.png\">\n  <p>Quali nome, descrizione, connessione di riferimento e flag di attività che se non spuntato\n    blocca l'esecuzione della stessa.</p>\n  <p>A seguire è mostrato l'elenco di parametri appartenenti alla query in una lista del tipo:</p>\n  <img src=\"./assets/help/queries2.png\">\n  <p>le azioni possibili su ogni parametro sono:</p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>star_border</mat-icon>\n    </button>\n    Aggiunge il parametro ai preferiti. In tal modo sarà possibile inserirne una copia in altre query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>play_for_work</mat-icon>\n    </button>\n    Inserisce il parametro nel punto della query selezionato o dove appare il cursore.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>edit</mat-icon>\n    </button>\n    Accede all'editor (popup) per la modifica del parametro.\n  </p>\n  <p>\n    <button color=\"warn\" mat-icon-button>\n      <mat-icon>delete</mat-icon>\n    </button>\n    Elimina il parametro.\n  </p>\n  <p>Di seguito poi il corpo del testo che descrive la query affiancato dall'utility per l'esplorazione\n    degli oggetti contenuti nel database:</p>\n  <img src=\"./assets/help/queries3.png\">\n  <p>Se la query è stata eseguita almeno una volta è presente lo schema. Questo viene mostrato come elenco di\n    campi con proprietà in una tabella del tipo:</p>\n  <img src=\"./assets/help/queries4.png\">\n  <p>Una volta eseguita la query, sono mostrate nella successiva sezione le statistiche di esecuzione:</p>\n  <ul>\n    <li>Tempo di esecuzione</li>\n    <li>Records totali</li>\n    <li>Numeri di campi</li>\n  </ul>\n  <img src=\"./assets/help/queries5.png\">\n  <p>Quindi lo script SQL realmente eseguito sullo specifico provider:</p>\n  <img src=\"./assets/help/queries6.png\">\n  <p>Ed infine i dati ricevuti dal servizio:</p>\n  <img src=\"./assets/help/queries7.png\">\n</div>\n<div id=\"help-queries-sql\">\n  <h1>Specifiche sql</h1>\n  <p>Il parametro inserito nel codice SQL si presenterà con la sintassi:</p>\n  <p code><![CDATA[{{]]><![CDATA[=nome parametro}}]]></p>\n  <p>se si tratta di parametro opzionale è possibile utilizzare le seguenti sintassi:</p>\n  <p code><![CDATA[{{]]><![CDATA[IF nome parametro}}\n    --codice sql valido quando il parametro è attivo]]>\n    <![CDATA[{{]]><![CDATA[ENDIF}}]]></p>\n  <p code><![CDATA[{{]]><![CDATA[IF! nome parametro}}\n    --codice sql valido quando il parametro non è attivo]]>\n    <![CDATA[{{]]><![CDATA[ENDIF}}]]></p>\n</div>\n<div id=\"help-queries-actions\">\n  <p>Azioni previste dall'editor:</p>\n  <img src=\"./assets/help/queries0.png\">\n  <p>\n    <button mat-icon-button>\n      <mat-icon>add_circle_outline</mat-icon>\n    </button>\n    Aggiunge una nuova query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>flash_on</mat-icon>\n    </button>\n    Esegue la query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>save</mat-icon>\n    </button>\n    Salva la query.\n  </p>\n  <p>\n    <button mat-icon-button>\n      <mat-icon>add_shopping_cart</mat-icon>\n    </button>\n    Aggiunge l'elemento selezionato all'elenco degli ogetti condivisibili.\n  </p>\n  <p>\n    <button mat-icon-button color=\"warn\">\n      <mat-icon>delete</mat-icon>\n    </button>\n    Elimina la query selezionata.\n  </p>\n</div>\n<div divider></div>\n<div id=\"help-queries-parameters\">\n  <h1>Editor di parametri</h1>\n  <p>L'editor dei parametri prevede 4 tipologie di parametro:</p>\n  <ul>\n    <li>\n      <h2>Normal</h2>\n      <img class=\"small\" src=\"./assets/help/queries9.png\">\n      <p>Parametro standard dove, una volta definito il tipo dato è possibile impostarne il valore di default e\n        corrente ed attribuirne le proprietà di opzionale o \"in sola lettura\"</p>\n    </li>\n    <li>\n      <h2>System</h2>\n      <img class=\"small\" src=\"./assets/help/queries8.png\">\n      <p>Parametro di sistema. Sono previsti attualmente due parametri di sistema impostabili dalla\n        proprietà <span highlight>System Type</span>.</p>\n      <p>Il valore è in sola lettura essendo calcolato lato server.</p>\n    </li>\n    <li>\n      <h2>List</h2>\n      <img class=\"small\" src=\"./assets/help/queries10.png\">\n      <p>Questo parametro prevede un elenco di valori possibili definiti dall'utente.</p>\n      <p>Prevede un'opzione in più rispetto ai parametri standard, cioè la multiselezione degli elementi.</p>\n    </li>\n    <li>\n      <h2>Lookup</h2>\n      <img class=\"small\" src=\"./assets/help/queries11.png\">\n      <p>Come la lista, prevede un elenco di valori possibili che questa volta sono determinati dall'esecuzione di\n        un'altra query esistente. Per la descrizione mostrata ed il valore devono quindi essere indicati i relativi\n        campi della query scelta.</p>\n      <p>Come la lista, prevede un'opzione in più rispetto ai parametri standard, cioè la multiselezione degli elementi.</p>\n    </li>\n  </ul>\n</div>\n\n"
 
 /***/ }),
 
@@ -2690,6 +2746,9 @@ var QueriesHelpComponent = (function () {
         this.map = [{
                 id: 'help-queries',
                 desc: 'Editor di query'
+            }, {
+                id: 'help-queries-sql',
+                desc: 'Specifiche SQL'
             }, {
                 id: 'help-queries-actions',
                 desc: 'Azioni possibili'
@@ -3064,7 +3123,7 @@ exports = module.exports = __webpack_require__("../../../../css-loader/lib/css-b
 
 
 // module
-exports.push([module.i, ".schema {\r\n  font-family: monospace;\r\n  position: relative; }\r\n  .schema .index {\r\n    width: 40px;\r\n    opacity: .3;\r\n    font-size: .8em;\r\n    margin-left: -20px; }\r\n  .schema .name {\r\n    width: 30%; }\r\n  .schema .type,\r\n  .schema .length {\r\n    width: 10%; }\r\n  .schema .mat-list-item {\r\n    border-bottom: #555 1px solid; }\r\n\r\n.executed-code {\r\n  font-size: .9em;\r\n  opacity: .7;\r\n  color: gold; }\r\n\r\n.result-table {\r\n  width: 100%;\r\n  min-width: 848px;\r\n  height: auto;\r\n  overflow-x: auto; }\r\n  .result-table .table-container {\r\n    overflow: auto; }\r\n    .result-table .table-container table {\r\n      border-collapse: collapse;\r\n      width: 100%; }\r\n    .result-table .table-container td, .result-table .table-container th {\r\n      border: 1px solid rgba(200, 200, 200, 0.05);\r\n      text-align: left;\r\n      padding: 8px;\r\n      min-width: 120px;\r\n      max-width: 400px;\r\n      overflow: hidden;\r\n      white-space: pre-wrap;\r\n      text-overflow: ellipsis; }\r\n    .result-table .table-container tr:nth-child(even) {\r\n      background-color: rgba(1, 1, 1, 0.1); }\r\n  .result-table .table-navigator {\r\n    line-height: 40px;\r\n    height: 40px; }\r\n\r\n.query-editor > .error {\r\n  padding: 10px;\r\n  background-color: #7b000017; }\r\n.query-editor .play-button {\r\n  position: absolute;\r\n  right: 270px;\r\n  bottom: 5px;\r\n  opacity: .4; }\r\n  .query-editor .play-button:not([disabled]):hover {\r\n    opacity: 1; }\r\n.query-editor .query-editor-container {\r\n  position: relative; }\r\n  .query-editor .query-editor-container app-schema-browser {\r\n    position: absolute;\r\n    top: 0;\r\n    right: 0;\r\n    height: 100%;\r\n    border-left: #333 4px solid;\r\n    z-index: 10;\r\n    background-color: #242424; }\r\n.query-editor .query-editor-parameters {\r\n  width: 848px; }\r\n  .query-editor .query-editor-parameters * {\r\n    line-height: 40px; }\r\n  .query-editor .query-editor-parameters .query-parameter {\r\n    height: 40px;\r\n    position: relative;\r\n    padding: 0 110px 0 10px;\r\n    margin-bottom: 4px; }\r\n    .query-editor .query-editor-parameters .query-parameter .query-parameter-toolbar {\r\n      position: absolute;\r\n      right: 0;\r\n      top: 0;\r\n      height: 40px;\r\n      padding: 0 10px; }\r\n    .query-editor .query-editor-parameters .query-parameter .value {\r\n      opacity: .3; }\r\n    .query-editor .query-editor-parameters .query-parameter .type {\r\n      opacity: .3;\r\n      display: inline-block;\r\n      right: 130px;\r\n      position: absolute; }\r\n\r\n.prp .prp-name {\r\n  font-size: .8em;\r\n  opacity: .5;\r\n  font-variant: small-caps;\r\n  min-width: 200px;\r\n  display: inline-block; }\r\n.prp .prp-value {\r\n  color: gold; }\r\n", ""]);
+exports.push([module.i, ".schema {\r\n  font-family: monospace;\r\n  position: relative; }\r\n  .schema .index {\r\n    width: 40px;\r\n    opacity: .3;\r\n    font-size: .8em;\r\n    margin-left: -20px; }\r\n  .schema .name {\r\n    width: 30%; }\r\n  .schema .type,\r\n  .schema .length {\r\n    width: 10%; }\r\n  .schema .mat-list-item {\r\n    border-bottom: #555 1px solid; }\r\n\r\n.executed-code {\r\n  font-size: .9em;\r\n  opacity: .7;\r\n  color: gold; }\r\n\r\n.result-table {\r\n  width: 100%;\r\n  min-width: 848px;\r\n  height: auto;\r\n  overflow-x: auto; }\r\n  .result-table .table-container {\r\n    overflow: auto; }\r\n    .result-table .table-container table {\r\n      border-collapse: collapse;\r\n      width: 100%; }\r\n    .result-table .table-container td, .result-table .table-container th {\r\n      border: 1px solid rgba(200, 200, 200, 0.05);\r\n      text-align: left;\r\n      padding: 8px;\r\n      min-width: 120px;\r\n      max-width: 400px;\r\n      overflow: hidden;\r\n      white-space: pre-wrap;\r\n      text-overflow: ellipsis; }\r\n    .result-table .table-container tr:nth-child(even) {\r\n      background-color: rgba(1, 1, 1, 0.1); }\r\n  .result-table .table-navigator {\r\n    line-height: 40px;\r\n    height: 40px; }\r\n\r\n.query-editor > .error {\r\n  padding: 10px;\r\n  background-color: #7b000017; }\r\n.query-editor .play-button {\r\n  position: absolute;\r\n  right: 270px;\r\n  bottom: 5px;\r\n  opacity: .4; }\r\n  .query-editor .play-button:not([disabled]):hover {\r\n    opacity: 1; }\r\n.query-editor .query-editor-container {\r\n  position: relative; }\r\n  .query-editor .query-editor-container app-schema-browser,\r\n  .query-editor .query-editor-container app-fields-browser {\r\n    position: absolute;\r\n    top: 0;\r\n    right: 0;\r\n    height: 100%;\r\n    border-left: #333 4px solid;\r\n    z-index: 10;\r\n    background-color: #242424; }\r\n.query-editor .query-editor-parameters {\r\n  width: 848px; }\r\n  .query-editor .query-editor-parameters * {\r\n    line-height: 40px; }\r\n  .query-editor .query-editor-parameters .query-parameter {\r\n    height: 40px;\r\n    position: relative;\r\n    padding: 0 110px 0 10px;\r\n    margin-bottom: 4px; }\r\n    .query-editor .query-editor-parameters .query-parameter .query-parameter-toolbar {\r\n      position: absolute;\r\n      right: 0;\r\n      top: 0;\r\n      height: 40px;\r\n      padding: 0 10px; }\r\n    .query-editor .query-editor-parameters .query-parameter .value {\r\n      opacity: .3; }\r\n    .query-editor .query-editor-parameters .query-parameter .type {\r\n      opacity: .3;\r\n      display: inline-block;\r\n      right: 130px;\r\n      position: absolute; }\r\n.query-editor .toolbar-editor-button .editor-button {\r\n  background-color: transparent;\r\n  box-shadow: none; }\r\n.query-editor .on-left {\r\n  float: left;\r\n  padding: 0 20px; }\r\n\r\n.prp .prp-name {\r\n  font-size: .8em;\r\n  opacity: .5;\r\n  font-variant: small-caps;\r\n  min-width: 200px;\r\n  display: inline-block; }\r\n.prp .prp-value {\r\n  color: gold; }\r\n", ""]);
 
 // exports
 
@@ -3077,7 +3136,7 @@ module.exports = module.exports.toString();
 /***/ "../../../../../src/app/pages/queries/queries.component.html":
 /***/ (function(module, exports) {
 
-module.exports = "<div class=\"page-container layout-fill\">\n  <app-browser></app-browser>\n  <div class=\"page-editor echo-scrollbar\" flex>\n    <app-page-header [options]=\"header\"></app-page-header>\n    <app-new-element *ngIf=\"ready\"></app-new-element>\n    <div class=\"page-cards query-editor\" *ngIf=\"browser.current\">\n      <mat-card>\n        <mat-card-header>\n          <mat-card-title></mat-card-title>\n          <mat-slide-toggle class=\"top-right\" [(ngModel)]=\"browser.current.active\">Active</mat-slide-toggle>\n        </mat-card-header>\n        <mat-card-content>\n          <div layout-col>\n            <div layout-row>\n              <mat-form-field layout-70>\n                <input matInput [(ngModel)]=\"browser.current.name\" placeholder=\"Name\">\n              </mat-form-field>\n              <mat-form-field layout-30>\n                <mat-select placeholder=\"Connection\" [(ngModel)]=\"browser.current.connection\" (change)=\"checkConnection()\">\n                  <mat-option *ngFor=\"let c of connections\" [value]=\"c._id\">\n                    {{ c.name }}\n                  </mat-option>\n                </mat-select>\n              </mat-form-field>\n            </div>\n            <mat-form-field>\n              <textarea matInput [(ngModel)]=\"browser.current.info\" rows=\"1\" matTextareaAutosize placeholder=\"Description\"></textarea>\n            </mat-form-field>\n          </div>\n        </mat-card-content>\n        <mat-card-actions layout-right>\n          <ng-container *ngIf=\"schema.paramStars.length\">\n            <button mat-icon-button matTooltip=\"Add a star parameter\" [matMenuTriggerFor]=\"menu\">\n              <mat-icon>stars</mat-icon>\n            </button>\n            <mat-menu #menu=\"matMenu\">\n              <button mat-menu-item *ngFor=\"let p of schema.paramStars\" (click)=\"insertStar(p)\">\n                <mat-icon>{{getParameterIcon(p)}}</mat-icon>\n                <span>{{p.name}}</span>\n              </button>\n              <mat-divider></mat-divider>\n              <button mat-menu-item (click)=\"clearStarParams()\">\n                <mat-icon>close</mat-icon>\n                <span>Delete list</span>\n              </button>\n            </mat-menu>\n          </ng-container>\n          <button mat-raised-button color=\"accent\" (click)=\"newParameter()\">ADD PARAMETER</button>\n        </mat-card-actions>\n      </mat-card>\n      <span *ngIf=\"((browser.current||{}).parameters||[]).length\">Parameters</span>\n      <div class=\"query-editor-parameters\">\n        <div class=\"query-parameter mat-elevation-z4 dark-background\" *ngFor=\"let p of browser.current.parameters\" layout-row>\n          <mat-icon aria-label=\"parameter type\" [matTooltip]=\"p.type\">{{getParameterIcon(p)}}</mat-icon>\n          <span class=\"name\">{{p.name}}</span>\n          <span class=\"value\"> = {{p.value}}</span>\n          <span class=\"type\">{{p.dataType}}</span>\n          <div class=\"query-parameter-toolbar\">\n            <mat-icon class=\"as-button\" (click)=\"star(p)\" aria-label=\"command favorite\">{{isCloned(p) ? 'star' : 'star_border'}}</mat-icon>\n            <mat-icon class=\"as-button\" (click)=\"insert(p)\" aria-label=\"command insert\">play_for_work</mat-icon>\n            <mat-icon class=\"as-button\" (click)=\"edit(p)\" aria-label=\"command edit\">edit</mat-icon>\n            <mat-icon class=\"as-button\" (click)=\"remove(p)\" aria-label=\"command delete\" color=\"warn\">delete</mat-icon>\n          </div>\n        </div>\n      </div>\n      <span>SQL</span>\n      <div class=\"mat-elevation-z4 dark-background query-editor-container\">\n        <codemirror #cmeditor [(ngModel)]=\"browser.current.query\" [config]=\"config\"></codemirror>\n        <button class=\"play-button\" color=\"accent\" mat-icon-button (click)=\"test()\" [disabled]=\"!(browser.current).query\">\n          <mat-icon>play_circle_filled</mat-icon>\n        </button>\n        <app-schema-browser (insert)=\"onInsert($event)\"></app-schema-browser>\n      </div>\n      <div *ngIf=\"error\" class=\"error\">{{error}}</div>\n      <span>Schema ({{(browser.current.columns||[]).length}} columns)</span>\n      <mat-card>\n        <mat-card-content>\n          <mat-list class=\"schema\">\n            <mat-list-item *ngFor=\"let c of browser.current.columns; let i = index\">\n              <span class=\"index\">{{(i+1)}}</span>\n              <span class=\"name\">{{c.name}}</span>\n              <span class=\"type\">{{c.type}}</span>\n              <span class=\"length\">{{c.length}}</span>\n              <span class=\"attr\">\n                {{c.nullable?'nullable,':''}}\n                {{c.caseSensitive?'caseSensitive,':''}}\n                {{c.identity?'identity,':''}}\n                {{c.readOnly?'readOnly,':''}}\n              </span>\n            </mat-list-item>\n          </mat-list>\n        </mat-card-content>\n      </mat-card>\n      <span *ngIf=\"!!result\">Stat</span>\n      <mat-card *ngIf=\"!!result\">\n        <div class=\"prp\"><span class=\"prp-name\">Elapsed</span><span class=\"prp-value\">{{result.stat.elapsed}}</span></div>\n        <div class=\"prp\"><span class=\"prp-name\">Records Count</span><span class=\"prp-value\">{{result.stat.rowCount}}</span></div>\n        <div class=\"prp\"><span class=\"prp-name\">Columns Count</span><span class=\"prp-value\">{{result.stat.colCount}}</span></div>\n      </mat-card>\n      <span *ngIf=\"!!(result||{}).sql\">Executed SQL</span>\n      <mat-card *ngIf=\"!!(result||{}).sql\">\n        <button mat-icon-button class=\"top-right\" ngxClipboard [cbContent]=\"result.sql\" matTooltip=\"Copy to clipboard\">\n          <mat-icon aria-label=\"copy button\">content_copy</mat-icon>\n        </button>\n        <pre class=\"executed-code\">{{(result||{}).sql}}</pre>\n      </mat-card>\n      <span *ngIf=\"!!(result||{}).rows\">Results ({{((result||{}).rows||[]).length}} records)</span>\n      <div *ngIf=\"(result||{}).rows\" class=\"result-table page-editor-card mat-elevation-z4\">\n        <div class=\"table-container echo-scrollbar\">\n          <table>\n            <tbody>\n            <tr><th *ngFor=\"let c of browser.current.columns\">{{c.name}}</th></tr>\n            <tr *ngFor=\"let r of result.view.rows\">\n              <td *ngFor=\"let c of browser.current.columns\">{{r[c.name]}}</td>\n            </tr>\n            </tbody>\n          </table>\n        </div>\n        <div class=\"table-navigator\" layout-row layout-right>\n          <button mat-icon-button matTooltip=\"prev page\" (click)=\"navigate(true)\" [disabled]=\"!result.view.prevEnabled\">\n            <mat-icon aria-label=\"left button\">navigate_before</mat-icon>\n          </button>\n          <div class=\"table-navigator-state\">{{result.view.state}}</div>\n          <button mat-icon-button matTooltip=\"next page\" (click)=\"navigate()\" [disabled]=\"!result.view.nextEnabled\">\n            <mat-icon aria-label=\"right button\">navigate_next</mat-icon>\n          </button>\n        </div>\n      </div>\n    </div>\n    <app-debug-pre></app-debug-pre>\n  </div>\n</div>\n\n"
+module.exports = "<div class=\"page-container layout-fill\">\n  <app-browser></app-browser>\n  <div class=\"page-editor echo-scrollbar\" flex>\n    <app-page-header [options]=\"header\"></app-page-header>\n    <app-new-element *ngIf=\"ready\"></app-new-element>\n    <div class=\"page-cards query-editor\" *ngIf=\"browser.current\">\n      <!-- HEADER -->\n      <mat-card>\n        <mat-card-header>\n          <mat-card-title></mat-card-title>\n          <mat-slide-toggle class=\"top-right\" [(ngModel)]=\"browser.current.active\">Active</mat-slide-toggle>\n        </mat-card-header>\n        <mat-card-content>\n          <div layout-col>\n            <div layout-row>\n              <mat-form-field layout-70>\n                <input matInput [(ngModel)]=\"browser.current.name\" placeholder=\"Name\">\n              </mat-form-field>\n              <mat-form-field layout-30>\n                <mat-select placeholder=\"Connection\" [(ngModel)]=\"browser.current.connection\" (change)=\"checkConnection()\">\n                  <mat-option *ngFor=\"let c of connections\" [value]=\"c._id\">\n                    {{ c.name }}\n                  </mat-option>\n                </mat-select>\n              </mat-form-field>\n            </div>\n            <mat-form-field>\n              <textarea matInput [(ngModel)]=\"browser.current.info\" rows=\"1\" matTextareaAutosize placeholder=\"Description\"></textarea>\n            </mat-form-field>\n          </div>\n        </mat-card-content>\n        <mat-card-actions layout-right>\n          <span *ngIf=\"dataEntryActive\" class=\"accent-color on-left\">Active for data-entry</span>\n          <ng-container *ngIf=\"schema.paramStars.length\">\n            <button mat-icon-button matTooltip=\"Add a star parameter\" [matMenuTriggerFor]=\"menu\">\n              <mat-icon>stars</mat-icon>\n            </button>\n            <mat-menu #menu=\"matMenu\">\n              <button mat-menu-item *ngFor=\"let p of schema.paramStars\" (click)=\"insertStar(p)\">\n                <mat-icon>{{getParameterIcon(p)}}</mat-icon>\n                <span>{{p.name}}</span>\n              </button>\n              <mat-divider></mat-divider>\n              <button mat-menu-item (click)=\"clearStarParams()\">\n                <mat-icon>close</mat-icon>\n                <span>Delete list</span>\n              </button>\n            </mat-menu>\n          </ng-container>\n          <button mat-raised-button color=\"{{dataEntryActive?'accent':''}}\" (click)=\"toggleDataEntry()\">DATA ENTRY</button>\n          <button mat-raised-button color=\"accent\" (click)=\"newParameter()\">ADD PARAMETER</button>\n        </mat-card-actions>\n      </mat-card>\n      <!-- PARAMETERS -->\n      <span *ngIf=\"((browser.current||{}).parameters||[]).length\">Parameters</span>\n      <div class=\"query-editor-parameters\">\n        <div class=\"query-parameter mat-elevation-z4 dark-background\" *ngFor=\"let p of browser.current.parameters\" layout-row>\n          <mat-icon aria-label=\"parameter type\" [matTooltip]=\"p.type\">{{getParameterIcon(p)}}</mat-icon>\n          <span class=\"name\">{{p.name}}</span>\n          <span class=\"value\"> = {{p.value}}</span>\n          <span class=\"type\">{{p.dataType}}</span>\n          <div class=\"query-parameter-toolbar\">\n            <mat-icon class=\"as-button\" (click)=\"star(p)\" aria-label=\"command favorite\">{{isCloned(p) ? 'star' : 'star_border'}}</mat-icon>\n            <mat-icon class=\"as-button\" (click)=\"insert(p)\" aria-label=\"command insert\">play_for_work</mat-icon>\n            <mat-icon class=\"as-button\" (click)=\"edit(p)\" aria-label=\"command edit\">edit</mat-icon>\n            <mat-icon class=\"as-button\" (click)=\"remove(p)\" aria-label=\"command delete\" color=\"warn\">delete</mat-icon>\n          </div>\n        </div>\n      </div>\n      <!-- SQL EDITOR -->\n      <div class=\"toolbar-editor-button\">\n        <button mat-raised-button class=\"editor-button\" [ngClass]=\"{'active':browser.current._editor==='get'}\" (click)=\"setEditor()\">SQL</button>\n        <button mat-raised-button *ngIf=\"dataEntryActive\" class=\"editor-button\" [ngClass]=\"{'active':browser.current._editor==='add'}\" (click)=\"setEditor('add')\">ADD</button>\n        <button mat-raised-button *ngIf=\"dataEntryActive\" class=\"editor-button\" [ngClass]=\"{'active':browser.current._editor==='update'}\" (click)=\"setEditor('update')\">UPDATE</button>\n        <button mat-raised-button *ngIf=\"dataEntryActive\" class=\"editor-button\" [ngClass]=\"{'active':browser.current._editor==='delete'}\" (click)=\"setEditor('delete')\">DELETE</button>\n      </div>\n      <div class=\"mat-elevation-z4 dark-background query-editor-container\">\n        <div *ngIf=\"browser.current._editor==='get'\">\n          <codemirror #cmeditor [(ngModel)]=\"browser.current.query\" [config]=\"config\"></codemirror>\n          <app-schema-browser (insert)=\"onInsert($event)\"></app-schema-browser>\n        </div>\n        <div *ngIf=\"browser.current._editor==='add'\">\n          <codemirror #cmeditor_add [(ngModel)]=\"browser.current.dataentryOptions.add\" [config]=\"config\"></codemirror>\n          <app-fields-browser (insert)=\"onInsertField($event)\"></app-fields-browser>\n        </div>\n        <div *ngIf=\"browser.current._editor==='update'\">\n          <codemirror #cmeditor_upd [(ngModel)]=\"browser.current.dataentryOptions.update\" [config]=\"config\"></codemirror>\n          <app-fields-browser (insert)=\"onInsertField($event)\"></app-fields-browser>\n        </div>\n        <div *ngIf=\"browser.current._editor==='delete'\">\n          <codemirror #cmeditor_del [(ngModel)]=\"browser.current.dataentryOptions.delete\" [config]=\"config\"></codemirror>\n          <app-fields-browser (insert)=\"onInsertField($event)\"></app-fields-browser>\n        </div>\n        <button *ngIf=\"browser.current._editor==='get'\" class=\"play-button\" color=\"accent\" mat-icon-button\n                (click)=\"test()\" [disabled]=\"!(browser.current||{}).query\" matTooltip=\"run query\">\n          <mat-icon>play_circle_filled</mat-icon>\n        </button>\n        <button *ngIf=\"browser.current._editor!=='get'\" class=\"play-button\" color=\"accent\" mat-icon-button\n                (click)=\"generate()\" [disabled]=\"!(browser.current||{}).connection\" matTooltip=\"generate code\">\n          <mat-icon>flash_on</mat-icon>\n        </button>\n      </div>\n      <!-- ERRORS -->\n      <div *ngIf=\"error\" class=\"error\">{{error}}</div>\n      <!-- SCHEMA -->\n      <span>Schema ({{(browser.current.columns||[]).length}} columns)</span>\n      <mat-card>\n        <mat-card-content>\n          <mat-list class=\"schema\">\n            <mat-list-item *ngFor=\"let c of browser.current.columns; let i = index\">\n              <span class=\"index\">{{(i+1)}}</span>\n              <span class=\"name\">{{c.name}}</span>\n              <span class=\"type\">{{c.type}}</span>\n              <span class=\"length\">{{c.length}}</span>\n              <span class=\"attr\">\n                {{c.nullable?'nullable,':''}}\n                {{c.caseSensitive?'caseSensitive,':''}}\n                {{c.identity?'identity,':''}}\n                {{c.readOnly?'readOnly,':''}}\n              </span>\n            </mat-list-item>\n          </mat-list>\n        </mat-card-content>\n      </mat-card>\n      <!-- STAT -->\n      <span *ngIf=\"!!result\">Stat</span>\n      <mat-card *ngIf=\"!!result\">\n        <div class=\"prp\"><span class=\"prp-name\">Elapsed</span><span class=\"prp-value\">{{result.stat.elapsed}}</span></div>\n        <div class=\"prp\"><span class=\"prp-name\">Records Count</span><span class=\"prp-value\">{{result.stat.rowCount}}</span></div>\n        <div class=\"prp\"><span class=\"prp-name\">Columns Count</span><span class=\"prp-value\">{{result.stat.colCount}}</span></div>\n      </mat-card>\n      <!-- EXECUTED SQL -->\n      <span *ngIf=\"!!(result||{}).sql\">Executed SQL</span>\n      <mat-card *ngIf=\"!!(result||{}).sql\">\n        <button mat-icon-button class=\"top-right\" ngxClipboard [cbContent]=\"result.sql\" matTooltip=\"Copy to clipboard\">\n          <mat-icon aria-label=\"copy button\">content_copy</mat-icon>\n        </button>\n        <pre class=\"executed-code\">{{(result||{}).sql}}</pre>\n      </mat-card>\n      <!-- RESULTS -->\n      <span *ngIf=\"!!(result||{}).rows\">Results ({{((result||{}).rows||[]).length}} records)</span>\n      <div *ngIf=\"(result||{}).rows\" class=\"result-table page-editor-card mat-elevation-z4\">\n        <div class=\"table-container echo-scrollbar\">\n          <table>\n            <tbody>\n            <tr><th *ngFor=\"let c of browser.current.columns\">{{c.name}}</th></tr>\n            <tr *ngFor=\"let r of result.view.rows\">\n              <td *ngFor=\"let c of browser.current.columns\">{{r[c.name]}}</td>\n            </tr>\n            </tbody>\n          </table>\n        </div>\n        <div class=\"table-navigator\" layout-row layout-right>\n          <button mat-icon-button matTooltip=\"prev page\" (click)=\"navigate(true)\" [disabled]=\"!result.view.prevEnabled\">\n            <mat-icon aria-label=\"left button\">navigate_before</mat-icon>\n          </button>\n          <div class=\"table-navigator-state\">{{result.view.state}}</div>\n          <button mat-icon-button matTooltip=\"next page\" (click)=\"navigate()\" [disabled]=\"!result.view.nextEnabled\">\n            <mat-icon aria-label=\"right button\">navigate_next</mat-icon>\n          </button>\n        </div>\n      </div>\n    </div>\n    <app-debug-pre></app-debug-pre>\n  </div>\n</div>\n\n"
 
 /***/ }),
 
@@ -3115,8 +3174,15 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 
 
 
+var EDITOR_TYPES = {
+    get: 'get',
+    add: 'add',
+    update: 'update',
+    'delete': 'delete'
+};
 var QueriesComponent = (function () {
     function QueriesComponent(browser, interaction, u, schema, cart, dialogs) {
+        var _this = this;
         this.browser = browser;
         this.interaction = interaction;
         this.u = u;
@@ -3132,6 +3198,7 @@ var QueriesComponent = (function () {
         this.result = null;
         this.result_str = '';
         this.editor = null;
+        this.dataEntryActive = false;
         var self = this;
         self.config = {
             lineNumbers: true,
@@ -3145,6 +3212,10 @@ var QueriesComponent = (function () {
                 self.idle = false;
                 self.result_str = '';
                 self.result = null;
+                self.browser.current._editor = EDITOR_TYPES.get;
+                self.browser.current.dataentryOptions = self.browser.current.dataentryOptions || {};
+                __WEBPACK_IMPORTED_MODULE_8_lodash___default.a.keys(EDITOR_TYPES).forEach(function (k) { return self.browser.current.dataentryOptions[k] = self.browser.current.dataentryOptions[k] || ''; });
+                self.dataEntryActive = !!__WEBPACK_IMPORTED_MODULE_8_lodash___default.a.find(__WEBPACK_IMPORTED_MODULE_8_lodash___default.a.keys(EDITOR_TYPES), function (k) { return !!_this.browser.current.dataentryOptions[k]; });
                 self.checkConnection();
             },
             onLoaded: function (docs) {
@@ -3262,11 +3333,12 @@ var QueriesComponent = (function () {
         this.result.view.rows = (this.result.rows || []).slice(pos, pos + this.result.view.pageRows);
         this.checkNavigator();
     };
-    QueriesComponent.prototype.replaceSelection = function (sql) {
-        if (!this.cmeditor) {
+    QueriesComponent.prototype.replaceSelection = function (sql, editor) {
+        editor = editor || this.cmeditor;
+        if (!editor) {
             return;
         }
-        var doc = this.cmeditor.instance.getDoc();
+        var doc = editor.instance.getDoc();
         doc.replaceSelection(sql);
     };
     QueriesComponent.prototype.onInsert = function (page) {
@@ -3288,6 +3360,21 @@ var QueriesComponent = (function () {
             this.replaceSelection(sqlname);
         }
         this.cmeditor.instance.focus();
+    };
+    QueriesComponent.prototype.currentEditor = function () {
+        return (this.browser.current._editor === EDITOR_TYPES.add) ? this.cmeditor_add :
+            ((this.browser.current._editor === EDITOR_TYPES.update) ? this.cmeditor_upd :
+                ((this.browser.current._editor === EDITOR_TYPES.delete) ? this.cmeditor_del : null));
+    };
+    QueriesComponent.prototype.onInsertField = function (field) {
+        var f = { name: field };
+        var sql = this.schema.helper.getParameterSql(f);
+        var editor = this.currentEditor();
+        if (!editor) {
+            return console.error('No codemirror editor available!');
+        }
+        this.replaceSelection(sql, editor);
+        editor.instance.focus();
     };
     QueriesComponent.prototype.getParameterIcon = function (p) {
         return QueriesComponent_1._getParameterIcon(p);
@@ -3324,6 +3411,47 @@ var QueriesComponent = (function () {
     QueriesComponent.prototype.remove = function (p) {
         __WEBPACK_IMPORTED_MODULE_8_lodash___default.a.pull(this.browser.current.parameters, p);
     };
+    QueriesComponent.prototype.setEditor = function (type) {
+        this.browser.current._editor = type || EDITOR_TYPES.get;
+    };
+    QueriesComponent.prototype.toggleDataEntry = function () {
+        var _this = this;
+        if (this.dataEntryActive) {
+            this.dataEntryActive = false;
+            __WEBPACK_IMPORTED_MODULE_8_lodash___default.a.keys(EDITOR_TYPES).forEach(function (k) { return _this.browser.current.dataentryOptions[k] = ''; });
+        }
+        else {
+            this.dataEntryActive = true;
+        }
+    };
+    QueriesComponent.prototype._generate = function () {
+        var self = this;
+        self.interaction.templatize({
+            action: (self.browser.current || {})._editor,
+            columns: (self.browser.current || {}).columns,
+            connection: (self.browser.current || {}).connection
+        }, function (err, r) {
+            if ((r || {}).template) {
+                self.browser.current.dataentryOptions[self.browser.current._editor] = r.template;
+            }
+        });
+    };
+    QueriesComponent.prototype.generate = function () {
+        var self = this;
+        var current = self.browser.current.dataentryOptions[self.browser.current._editor];
+        if (current) {
+            self.u.confirm({
+                message: 'Current script will be overwritten, do you want to continue?',
+                ok: 'Yes',
+                cancel: 'No'
+            }, function (resp) {
+                (resp === 'ok') ? self._generate() : self.u.noop();
+            });
+        }
+        else {
+            self._generate();
+        }
+    };
     QueriesComponent.prototype.ngOnInit = function () {
         this.ready = true;
     };
@@ -3335,6 +3463,18 @@ var QueriesComponent = (function () {
         Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["ViewChild"])('cmeditor'),
         __metadata("design:type", Object)
     ], QueriesComponent.prototype, "cmeditor", void 0);
+    __decorate([
+        Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["ViewChild"])('cmeditor_add'),
+        __metadata("design:type", Object)
+    ], QueriesComponent.prototype, "cmeditor_add", void 0);
+    __decorate([
+        Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["ViewChild"])('cmeditor_upd'),
+        __metadata("design:type", Object)
+    ], QueriesComponent.prototype, "cmeditor_upd", void 0);
+    __decorate([
+        Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["ViewChild"])('cmeditor_del'),
+        __metadata("design:type", Object)
+    ], QueriesComponent.prototype, "cmeditor_del", void 0);
     QueriesComponent = QueriesComponent_1 = __decorate([
         Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["Component"])({
             selector: 'app-queries',
@@ -4224,13 +4364,18 @@ var BrowserService = (function () {
     BrowserService.prototype.newElement = function () {
         var self = this;
         var doc = {};
-        __WEBPACK_IMPORTED_MODULE_5_lodash___default.a.extend(doc, self.options.template);
+        var baseDoc = self.u.clone(self.options.template);
+        __WEBPACK_IMPORTED_MODULE_5_lodash___default.a.extend(doc, baseDoc);
         doc._id = self.u.guid();
         doc._type = self.options.type;
         doc._new = true;
+        if (__WEBPACK_IMPORTED_MODULE_5_lodash___default.a.has(doc, 'name')) {
+            doc.name = this.u.getNewName(self._documents, doc.name);
+        }
         self._documents.push(doc);
         self.current = doc;
         this._refresh();
+        this.onSelectionChanged();
     };
     BrowserService.prototype.refresh = function (deep) {
         var self = this;
@@ -4657,11 +4802,11 @@ var InteractionService = (function () {
     };
     InteractionService.prototype.setScenario = function (scenario, cb) {
         this.http.post(this.user.getUrl('api/scenario/apply'), scenario)
-            .subscribe(function (r) { return cb(r); }, InteractionService_1._err());
+            .subscribe(function (r) { return cb(null, r); }, InteractionService_1._err());
     };
     InteractionService.prototype.saveScenario = function (scenario, cb) {
         this.http.post(this.user.getUrl('api/scenario/update'), scenario)
-            .subscribe(function (r) { return cb(r); }, InteractionService_1._err());
+            .subscribe(function (r) { return cb(null, r); }, InteractionService_1._err());
     };
     InteractionService.prototype.testConnection = function (o, cb) {
         this.http.post(this.user.getUrl('api/data/test/conn'), o)
@@ -4724,7 +4869,12 @@ var InteractionService = (function () {
     };
     InteractionService.prototype.api = function (cb) {
         var self = this;
-        self.http.get(this.user.getUrl('api')).subscribe(function (r) { return cb(r); }, function (err) { return self.u.error(err); });
+        self.http.get(self.user.getUrl('api')).subscribe(function (r) { return cb(r); }, function (err) { return self.u.error(err); });
+    };
+    InteractionService.prototype.templatize = function (options, cb) {
+        var self = this;
+        self.http.post(self.user.getUrl('api/data/template'), options)
+            .subscribe(function (r) { return cb(null, r); }, InteractionService_1._err(cb));
     };
     InteractionService.prototype.test = function (o, cb) {
         try {
@@ -5618,12 +5768,8 @@ var UtilsService = (function () {
 
 "use strict";
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return environment; });
-// The file contents for the current environment will overwrite these during build.
-// The build system defaults to the dev environment which uses `environment.ts`, but if you do
-// `ng build --env=prod` then `environment.prod.ts` will be used instead.
-// The list of which env maps to which file can be found in `.angular-cli.json`.
 var environment = {
-    production: false,
+    production: true,
     github: 'https://github.com/leolmi/echo-service.client'
 };
 

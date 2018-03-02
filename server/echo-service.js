@@ -108,6 +108,7 @@ module.exports = require("lodash");
 
 const _ = __webpack_require__(0);
 const fs = __webpack_require__(5);
+const path = __webpack_require__(3);
 const _release = typeof __webpack_require__ === "function";
 const _use =  true ? require : require;
 var noop = function() {};
@@ -199,95 +200,12 @@ var _log = function(message, err, maxLength) {
 };
 exports.log = _log;
 
-/**
- * Aggiorna l'elemento ricercato per id
- * @param schema
- * @param req
- * @param res
- * @param {Function} customize
- * @param {Function} cb
- * @param {Boolean} [verbose]
- */
-exports.update = function(schema, req, res, customize, cb, verbose) {
-  if (verbose) console.log('[UPDATE] - body: ' + JSON.stringify(req.body));
-  if (req.body._id) {
-    delete req.body._id;
-  }
-  if (verbose) console.log('[UPDATE] - params: ' + JSON.stringify(req.params));
-  schema.findById(req.params.id, function (err, obj) {
-    if (err) {
-      if (verbose) console.error('[UPDATE.ERROR] Schema dati: "' + schema.modelName + '", ' + err.message);
-      return error(res, err);
-    }
-    if (!obj) {
-      return notfound(res);
-    }
-    if (verbose) console.log('[UPDATE] - before merge: ' + JSON.stringify(obj));
-    var updated = _.merge(obj, req.body, function (a, b) {
-      return _.isArray(a) ? b : undefined;
-    });
-    updated.__v = obj.__v;
-    if (customize)
-      customize(updated);
-    if (verbose) console.log('[UPDATE] - after merge: ' + JSON.stringify(updated));
-    updated.save(function (err) {
-      if (err) {
-        if (verbose) console.log('[UPDATE.MONGO.ERROR] - save: ' + err.message);
-        return error(res, err);
-      }
-      ok(res, obj, cb);
-    });
-  });
-};
-
-exports.create = function(schema, req, res, cb) {
-  cb = cb || noop;
-  schema.create(req.body, function(err, obj) {
-    if(err) { return error(res, err); }
-    return created(res, obj, cb);
-  });
-};
-
-exports.destroy = function(schema, req, res, cb) {
-  schema.findById(req.params.id, function (err, obj) {
-    if(err) { return error(res, err); }
-    if(!obj) { return notfound(res); }
-    obj.remove(function(err) {
-      if(err) { return error(res, err); }
-      return deleted(res, obj, cb);
-    });
-  });
-};
-
-exports.get = function(schema, req, res) {
-  schema.findById(req.params.id, function (err, obj) {
-    if(err) {
-      _log(null, '[TEST-X5] u.get.findById('+req.params.id+') ERROR:'+err.toString(), 100);
-      return error(res, err);
-    }
-    if(!obj) {
-      _log('[TEST-X5] u.get.findById('+req.params.id+') NO OBJECT');
-      return notfound(res);
-    }
-    _log('[TEST-X5] u.get.findById('+req.params.id+') SUCCESS:'+JSON.stringify(obj), null, 100);
-    res.json(obj);
-  });
-};
-
-exports.index = function(schema, req, res, filter) {
-  filter = filter || {};
-  schema.find(filter, function (err, objs) {
-    _log('Trovati: '+objs.length+' elementi di tipo "'+schema.fsTpye+'".');
-    if(err) { return error(res, err); }
-    ok(res, objs);
-  });
-};
-
 
 var Composer = function(execFnName) {
   this.exec = execFnName || 'exec';
   this.stack = [];
   this.step=  0;
+  this.exit = false;
 };
 Composer.prototype = {
   use: function(step) {
@@ -305,15 +223,15 @@ Composer.prototype = {
     cb = cb || noop;
     var self = this;
     self.step = 0;
-    if (self.stack.length<=0) return cb();
+    if (self.stack.length<=0) return cb(self);
     (function next() {
       var step = self.getStep();
-      if (!step) {
-        cb();
+      if (self.exit || !step) {
+        cb(self);
       } else if (_.isFunction(step)) {
-        step.call(self, next);
+        step.call(self, next, self);
       } else if (_.isFunction(step[self.exec])) {
-        step[self.exec](next);
+        step[self.exec](next, self);
       }
     })();
   }
@@ -547,27 +465,6 @@ exports.generateTable = function(o) {
   return rows;
 };
 
-exports.getFileName = function(name) {
-  return (name||'file').replace(/[\\\/\s:\*\?"<>\|]/gi, '_');
-};
-
-exports.saveFile = function(filename, obj, cb, noformat) {
-  var content = (noformat === true) ? JSON.stringify(obj) : JSON.stringify(obj, null, 2);
-  var buffer = Buffer.from(content);
-  try {
-    var writer = fs.createWriteStream(filename, {flags: 'w'});
-    writer.on('error', function(err) {
-      cb(err);
-    });
-    writer.write(buffer, function() {
-      cb();
-    });
-  }
-  catch(err) {
-    cb(err);
-  }
-};
-
 exports.events = function() {
   return {
     onLog: function() {}
@@ -583,13 +480,107 @@ exports.use = _use;
 exports.release = _release;
 
 
+exports.io = {
+  getFileName: function(name) {
+    return (name||'file').replace(/[\\\/\s:\*\?"<>\|]/gi, '_');
+  },
+  checkFolder: function(folder, cb) {
+    fs.stat(folder, function(err, stats) {
+      if (err) {
+        if (err.errno === 34 || err.errno === -4058 || err.code === 'ENOENT') {
+          //se non esiste la crea
+          fs.mkdir(folder, cb);
+        } else {
+          cb(err);
+        }
+      } else {
+        cb();
+      }
+    });
+  },
+  load: function(filename, cb) {
+    //console.log('try open file: %s',filename);
+    fs.stat(filename, function(err, stats) {
+      if (err) return cb(err);
+      //console.log('try read file: %s',filename);
+      fs.readFile(filename, 'utf8', function (err, data) {
+        if (err) return cb(err);
+        try {
+          data = (data||'').replace(/^\uFEFF/, '');
+          const obj = JSON.parse(data);
+          //console.log('file done:', obj);
+          return cb(null, obj);
+        } catch(err) {
+          cb(err);
+        }
+      });
+    });
+  },
+  save: function(filename, obj, cb, noformat) {
+    var content = (noformat === true) ? JSON.stringify(obj) : JSON.stringify(obj, null, 2);
+    var buffer = Buffer.from(content);
+    try {
+      var writer = fs.createWriteStream(filename, {flags: 'w'});
+      writer.on('error', function(err) {
+        cb(err);
+      });
+      writer.write(buffer, function() {
+        cb();
+      });
+    }
+    catch(err) {
+      cb(err);
+    }
+  },
+  delete: function(filename, cb) {
+    fs.stat(filename, function(err, stats) {
+      if (err) return cb(err);
+      fs.unlink(filename, function(err){
+        if (err) return cb(err);
+        cb();
+      });
+    });
+  },
+  truncate: function(data, path, cb) {
+    fs.truncate(path, 0, function(err) {
+      if (err) return console.log("Error clearing file: " + err);
+      const content = JSON.stringify(data||{}, null, 2);
+      fs.writeFile(path, content, function (err) {
+        if (err) return console.log("Error writing file: " + err);
+        cb();
+      });
+    });
+  },
+  on: function() {
+    function __validator(ele, type) {
+      switch (type) {
+        case 'file':return fs.statSync(ele).isFile();
+        case 'directory':
+        case 'folder':return fs.statSync(ele).isDirectory();
+        default:return false;
+      }
+    }
+    const args = Array.prototype.slice.call(arguments);
+    const type = args.shift();
+    const cb = args.pop();
+    const ele = path.join.apply(null, args);
+    console.log('ON type=%s', args);
+    if (fs.existsSync(ele)) {
+      (__validator(ele, type) && _.isFunction(cb)) ? cb(ele) : cb();
+    } else {
+      cb();
+    }
+  }
+};
+
+
 /***/ }),
 /* 2 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 const fs = __webpack_require__(5);
 const _ = __webpack_require__(0);
 const u = __webpack_require__(1);
@@ -635,7 +626,7 @@ const settings = {
   serverPath: path.normalize(__dirname + '/../..'),
   // Path del client
   clientPath: '',
-  // Store path for scenarios
+  // Store path for log
   logPath: _checkPath(process.env.ECHO_LOG),
   // Store path for scenarios
   storePath: _checkPath(process.env.ECHO_STORE),
@@ -664,13 +655,13 @@ module.exports = settings;
 /* 3 */
 /***/ (function(module, exports) {
 
-module.exports = require("express");
+module.exports = require("path");
 
 /***/ }),
 /* 4 */
 /***/ (function(module, exports) {
 
-module.exports = require("path");
+module.exports = require("express");
 
 /***/ }),
 /* 5 */
@@ -685,7 +676,7 @@ module.exports = require("fs");
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
 const fs = __webpack_require__(5);
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 const u = __webpack_require__(1);
 const config = __webpack_require__(2);
 const socket = __webpack_require__(11);
@@ -798,7 +789,7 @@ const Cache = __webpack_require__(34);
 const Log = __webpack_require__(6);
 const commons = __webpack_require__(35);
 const version = __webpack_require__(36);
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 const zip = __webpack_require__(37);
 
 const DEFAULT_SCENARIO = 'default';
@@ -1555,7 +1546,7 @@ TableSchema.prototype = {
   helper: null,
   getSqlValue: function(col, value) {
     var column = _.isObject(col) ? col : _.find(this.columns, function (c) {
-      return c.COLUMN_NAME == col;
+      return c.COLUMN_NAME === col;
     });
     return this.helper ?
       this.helper.getSqlValue(column.DATA_TYPE, value) :
@@ -1690,7 +1681,7 @@ const crypto = __webpack_require__(40);
 const config = __webpack_require__(2);
 const u = __webpack_require__(1);
 const _ = __webpack_require__(0);
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 const USERS_STORE = 'users.json';
 const store = __webpack_require__(41);
 
@@ -1801,7 +1792,7 @@ function _token(user) {
 }
 
 function _update() {
-  u.saveFile(users_store_path, store, function(err) {
+  u.io.save(users_store_path, store, function(err) {
     err ? console.error(err) : console.log('Users store updated');
   });
 }
@@ -1871,7 +1862,7 @@ const u = __webpack_require__(1);
 const URL = __webpack_require__(55);
 const Scenario = __webpack_require__(7);
 const fs = __webpack_require__(5);
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 
 function _parseUrl(req) {
   const U = URL.parse(req.url);
@@ -2026,7 +2017,7 @@ module.exports = function(req, res) {
 "use strict";
 
 console.log('-----------------------------------------------\nECHO-SERVICE starting...');
-const express = __webpack_require__(3);
+const express = __webpack_require__(4);
 const config = __webpack_require__(2);
 // Setup server
 const app = express();
@@ -2115,7 +2106,7 @@ module.exports = function (socketio) {
   socketio.on('connection', function (socket) {
     const hs = socket.handshake.address||{};
     socket.address = hs.address ? hs.address + ':' + hs.port : hs;
-    console.log('handshake:', socket.handshake);
+    //console.log('handshake:', socket.handshake);
 
     socket.connectedAt = new Date();
     // Call onDisconnect.
@@ -2142,7 +2133,7 @@ module.exports = function (socketio) {
 
 "use strict";
 
-const express = __webpack_require__(3);
+const express = __webpack_require__(4);
 const favicon = __webpack_require__(20);
 const morgan = __webpack_require__(21);
 const compression = __webpack_require__(22);
@@ -2150,7 +2141,7 @@ const bodyParser = __webpack_require__(23);
 const methodOverride = __webpack_require__(24);
 const cookieParser = __webpack_require__(25);
 const errorHandler = __webpack_require__(26);
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 const config = __webpack_require__(2);
 const client_path = config.clientPath||'client';
 
@@ -2303,7 +2294,7 @@ module.exports[404] = function pageNotFound(req, res) {
 
 const api = __webpack_require__(31);
 const u = __webpack_require__(1);
-const express = __webpack_require__(3);
+const express = __webpack_require__(4);
 const Log = __webpack_require__(6);
 
 var router = express.Router();
@@ -2327,7 +2318,7 @@ module.exports = router;
 /* 31 */
 /***/ (function(module, exports) {
 
-module.exports = [{"description":"Scenari","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario","description":"Elenco degli scenari disponibili","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/current","description":"Info dello scenario corrente","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/info/:name","description":"Info dello scenario","body":{"name":{"type":"string","description":"Folder dello scenario richiesto"}},"response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/download/:folder","description":"Download scenario","body":{"folder":{"type":"string","description":"Nome del folder dello scenario da scaricare"}},"response":{"type":"file","description":"File compresso dello scenario ({FOLDER-NAME}.zip)"}},{"verb":"post","route":"api/scenario/push","description":"Inserisce documenti in uno scenario","auth":true,"body":{"source":{"type":"array","description":"elenco dei documenti da inserire nello scenario"},"target":{"type":"object","description":"info di scenario target (deve avere almeno la property folder)"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/apply","description":"Applica uno scenario","body":"Se passato il folder applica lo scenario, altrimenti, se è un oggetto, ne crea uno nuovo","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/update","description":"Applica le modifiche allo scenario","body":"Scenario con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/settings","description":"Applica le modifiche alle impostazioni dello scenario","body":"Impostazioni con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/upload","description":"Carica uno scenario sul server","body":"File compresso con i documenti dello scenario (xxx.zip)","response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Documenti","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario/documents/:type*?","description":"Elenco dei documenti dello scenario corrente","body":{"type":{"type":"string","description":"Se definito filtra i documenti per tipologia restituendo il contenuto integralmente"}},"response":{"type":"array","object":{"id":{"type":"string","description":"Identificativo del documento"},"name":{"type":"string","description":"Nome del documento"},"title":{"type":"string","description":"Titolo del documento"},"description":{"type":"string","description":"Descrizione del documento"},"modifiedAt":{"type":"date","description":"Data dell'ultima modifica"},"modifiedBy":{"type":"date","description":"Autore dell'ultima modifica"},"_id":{"type":"string","description":"Identificativo del documento (interno)"},"_type":{"type":"string","description":"Tipologia del documento (interno)"},"_tid":{"type":"string","description":"Identificativo con tipo del documento (interno)"}}}},{"verb":"get","route":"api/scenario/tags","description":"Elenco dei tag sui documenti dello scenario corrente","response":{"type":"array","description":"Elenco dei tag"}},{"verb":"get","route":"api/scenario/document/:id/:type*?","description":"Il singolo documento per id e (opzionale) tipo","body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":{"type":"object","description":"Contenuto del documento in formato json"}},{"verb":"post","route":"api/scenario/save","description":"Salva un documento","auth":true,"body":"Documento da salvare","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/scenario/:id/:type*?","description":"Elimina un documento","auth":true,"body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Dati","baseRoute":"api/data","routes":[{"verb":"get","route":"api/data/providers","description":"Elenco dei providers disponibili","response":{"type":"array","object":{"active":{"type":"bool","description":"Descrive lo stato di attività della connessione"},"enabled":{"type":"bool","description":"Se vero è possibile utilizzare questo provider"},"library":{"type":"string","description":"Nome della libreria"},"name":{"type":"string","description":"Nome del provider"},"code":{"type":"string","description":"Codifica del nome"},"instance":{"type":"object","description":"logic"},"defaultPort":{"type":"number","description":"Porta predefinita"}}}},{"verb":"get","route":"api/data/schema/:id","auth":true,"description":"Schema relativo alla connessione indicata","body":{"id":{"type":"string","description":"Identificativo della connessione"}},"response":{"type":"object","description":"ANSI standard information_schema"}},{"verb":"get","route":"api/data/system","auth":true,"description":"Elenco dei parametri di sistema","response":{"type":"array","object":{"name":{"type":"string","description":"Nome del parametro"},"id":{"type":"string","description":"Identificativo"},"value":{"type":"any","description":"Valore del parametro di sistema"},"dataType":{"type":"string","description":"Tipo dato"}}}},{"verb":"post","route":"api/data/execute","auth":true,"description":"Esecuzione di una query","body":{"id":{"type":"string","description":"Identificativo della query da eseguire"},"parameters":{"type":"array","description":"Elenco dei parametri per l'esecuzione"}},"response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/test/conn","description":"Test della connessione","body":"Documento connection da eseguire","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/data/test/exec","description":"Test della query","body":"Documento query da eseguire","response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}}]},{"description":"Utenti","baseRoute":"api/user","routes":[{"verb":"get","route":"api/user","description":"Elenco degli utenti (solo per ruoli 'admin')","response":{"type":"array","description":"Elenco degli utenti"}},{"verb":"get","route":"api/user/me","description":"Info sull'utente correntemente loggato","response":{"type":"object","description":"Utente corrente"}},{"verb":"get","route":"api/user/:id","description":"Info sull'utente","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":{"type":"string","description":"Profilo dell'utente"}},{"verb":"post","route":"api/user","description":"Crea un nuovo utente (solo per ruoli 'admin')","body":{"name":{"type":"string","description":"Nome dell'utente"},"password":{"type":"string","description":"Password dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/user/:id","description":"Elimina un utente (solo per ruoli 'admin')","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Auth","baseRoute":"auth","routes":[{"verb":"post","route":"auth/local","description":"Autenticazione","response":{"type":"object","description":"Restituisce un oggetto contenente il token se autenticato altrimenti l'errore relativo"}}]},{"description":"LOG","baseRoute":"api/log","routes":[{"verb":"get","route":"api/log","description":"Elenco delle righe di log inserite dall'avvio del servizio nel periodo definito nella configurazione","response":{"type":"array","description":"Elenco delle righe di log"}}]},{"description":"API","baseRoute":"api","routes":[{"verb":"get","route":"api","description":"Elenco delle api di echo-service","response":{"type":"object","description":"Questo documento!"}}]}]
+module.exports = [{"description":"Scenari","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario","description":"Elenco degli scenari disponibili","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/current","description":"Info dello scenario corrente","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/info/:name","description":"Info dello scenario","body":{"name":{"type":"string","description":"Folder dello scenario richiesto"}},"response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/download/:folder","description":"Download scenario","body":{"folder":{"type":"string","description":"Nome del folder dello scenario da scaricare"}},"response":{"type":"file","description":"File compresso dello scenario ({FOLDER-NAME}.zip)"}},{"verb":"post","route":"api/scenario/push","description":"Inserisce documenti in uno scenario","auth":true,"body":{"source":{"type":"array","description":"elenco dei documenti da inserire nello scenario"},"target":{"type":"object","description":"info di scenario target (deve avere almeno la property folder)"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/apply","description":"Applica uno scenario","body":"Se passato il folder applica lo scenario, altrimenti, se è un oggetto, ne crea uno nuovo","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/update","description":"Applica le modifiche allo scenario","body":"Scenario con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/settings","description":"Applica le modifiche alle impostazioni dello scenario","body":"Impostazioni con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/upload","description":"Carica uno scenario sul server","body":"File compresso con i documenti dello scenario (xxx.zip)","response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Documenti","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario/documents/:type*?","description":"Elenco dei documenti dello scenario corrente","body":{"type":{"type":"string","description":"Se definito filtra i documenti per tipologia restituendo il contenuto integralmente"}},"response":{"type":"array","object":{"id":{"type":"string","description":"Identificativo del documento"},"name":{"type":"string","description":"Nome del documento"},"title":{"type":"string","description":"Titolo del documento"},"description":{"type":"string","description":"Descrizione del documento"},"modifiedAt":{"type":"date","description":"Data dell'ultima modifica"},"modifiedBy":{"type":"date","description":"Autore dell'ultima modifica"},"_id":{"type":"string","description":"Identificativo del documento (interno)"},"_type":{"type":"string","description":"Tipologia del documento (interno)"},"_tid":{"type":"string","description":"Identificativo con tipo del documento (interno)"}}}},{"verb":"get","route":"api/scenario/tags","description":"Elenco dei tag sui documenti dello scenario corrente","response":{"type":"array","description":"Elenco dei tag"}},{"verb":"get","route":"api/scenario/document/:id/:type*?","description":"Il singolo documento per id e (opzionale) tipo","body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":{"type":"object","description":"Contenuto del documento in formato json"}},{"verb":"post","route":"api/scenario/save","description":"Salva un documento","auth":true,"body":"Documento da salvare","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/scenario/:id/:type*?","description":"Elimina un documento","auth":true,"body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Dati","baseRoute":"api/data","routes":[{"verb":"get","route":"api/data/providers","description":"Elenco dei providers disponibili","response":{"type":"array","object":{"active":{"type":"bool","description":"Descrive lo stato di attività della connessione"},"enabled":{"type":"bool","description":"Se vero è possibile utilizzare questo provider"},"library":{"type":"string","description":"Nome della libreria"},"name":{"type":"string","description":"Nome del provider"},"code":{"type":"string","description":"Codifica del nome"},"instance":{"type":"object","description":"logic"},"defaultPort":{"type":"number","description":"Porta predefinita"}}}},{"verb":"get","route":"api/data/schema/:id","auth":true,"description":"Schema relativo alla connessione indicata","body":{"id":{"type":"string","description":"Identificativo della connessione"}},"response":{"type":"object","description":"ANSI standard information_schema"}},{"verb":"get","route":"api/data/system","auth":true,"description":"Elenco dei parametri di sistema","response":{"type":"array","object":{"name":{"type":"string","description":"Nome del parametro"},"id":{"type":"string","description":"Identificativo"},"value":{"type":"any","description":"Valore del parametro di sistema"},"dataType":{"type":"string","description":"Tipo dato"}}}},{"verb":"post","route":"api/data/execute","auth":true,"description":"Esecuzione di una query","body":{"id":{"type":"string","description":"Identificativo della query da eseguire"},"parameters":{"type":"array","description":"Elenco dei parametri per l'esecuzione"}},"response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/test/conn","description":"Test della connessione","body":"Documento connection da eseguire","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/data/test/exec","description":"Test della query","body":"Documento query da eseguire","response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/dataentry","description":"Operazioni di data-entry","body":{"action":{"type":"string","description":"Azione dell'operazione di data-entry"},"datasourceId":{"type":"string","description":"Identificativo della sorgente dati"},"changedFields":{"type":"array","description":"Elenco dei field modificati"},"changedRows":{"type":"array","description":"Elenco dei row modificati"},"originalRows":{"type":"array","description":"Elenco dei row originali"}},"response":{"type":"object","object":{"affected":{"type":"number","description":"Numero degli elementi modificati"},"error":{"type":"string","description":"Errore nell'esecuzione del comando di data-entry"}}}},{"verb":"post","route":"api/data/template","description":"Restituisce il template sql per l'operazione richiesta","body":{"action":{"type":"string","description":"Azione dell'operazione di data-entry"},"connection":{"type":"string","description":"Identificativo della connessione utilizzata"},"columns":{"type":"array","description":"Elenco dei campi"}},"response":{"type":"object","object":{"template":{"type":"string","description":"Il template richiesto"}}}}]},{"description":"Utenti","baseRoute":"api/user","routes":[{"verb":"get","route":"api/user","description":"Elenco degli utenti (solo per ruoli 'admin')","response":{"type":"array","description":"Elenco degli utenti"}},{"verb":"get","route":"api/user/me","description":"Info sull'utente correntemente loggato","response":{"type":"object","description":"Utente corrente"}},{"verb":"get","route":"api/user/:id","description":"Info sull'utente","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":{"type":"string","description":"Profilo dell'utente"}},{"verb":"post","route":"api/user","description":"Crea un nuovo utente (solo per ruoli 'admin')","body":{"name":{"type":"string","description":"Nome dell'utente"},"password":{"type":"string","description":"Password dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/user/:id","description":"Elimina un utente (solo per ruoli 'admin')","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Auth","baseRoute":"auth","routes":[{"verb":"post","route":"auth/local","description":"Autenticazione","response":{"type":"object","description":"Restituisce un oggetto contenente il token se autenticato altrimenti l'errore relativo"}}]},{"description":"LOG","baseRoute":"api/log","routes":[{"verb":"get","route":"api/log","description":"Elenco delle righe di log inserite dall'avvio del servizio nel periodo definito nella configurazione","response":{"type":"array","description":"Elenco delle righe di log"}}]},{"description":"API","baseRoute":"api","routes":[{"verb":"get","route":"api","description":"Elenco delle api di echo-service","response":{"type":"object","description":"Questo documento!"}}]}]
 
 /***/ }),
 /* 32 */
@@ -2336,7 +2327,7 @@ module.exports = [{"description":"Scenari","baseRoute":"api/scenario","routes":[
 "use strict";
 
 
-var express = __webpack_require__(3);
+var express = __webpack_require__(4);
 var controller = __webpack_require__(7);
 var auth = __webpack_require__(8);
 
@@ -2385,7 +2376,7 @@ module.exports = router;
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
 const fs = __webpack_require__(5);
-const path = __webpack_require__(4);
+const path = __webpack_require__(3);
 const _ = __webpack_require__(0);
 const u = __webpack_require__(1);
 const config = __webpack_require__(2);
@@ -2701,7 +2692,7 @@ module.exports = [{"name":"admin","role":"admin","_id":"352bd835-07be-44f1-96e4-
 "use strict";
 
 
-var express = __webpack_require__(3);
+var express = __webpack_require__(4);
 var controller = __webpack_require__(43);
 var auth = __webpack_require__(8);
 
@@ -2720,6 +2711,10 @@ router.post('/execute', auth.needAuthentication(controller.checkData), controlle
 router.post('/test/conn', controller.testconn);
 // test di esecuzione
 router.post('/test/exec', controller.test);
+// data-entry
+router.post('/dataentry', controller.dataentry);
+// template
+router.post('/template', controller.template);
 
 module.exports = router;
 
@@ -2905,6 +2900,120 @@ exports.systemParameters = _systemParameters;
 exports.system = function(req, res) {
   _systemParameters(req, function(params){
     u.ok(res, params);
+  });
+};
+
+function _decodeAction(action) {
+  switch(action) {
+    case 'add':
+    case 'create':
+      return 'insert';
+    case 'modify':
+      return 'update';
+    case 'remove':
+      return 'delete';
+    default: return action;
+  }
+}
+
+function _replace(sql, row) {
+  _.keys(row || {}).forEach(function (k) {
+    const rgx = new RegExp('{{=?' + k + '}}', 'gi');
+    sql = sql.replace(rgx, row[k]);
+  });
+  return sql;
+}
+
+/*
+const operation = {
+  action: action,
+  datasourceId: doc.datasourceId,
+  datasourceName: doc.datasourceName,
+  datasourceProvider: doc.datasourceProvider,
+  metadata: doc.metadata,
+  changedFields: affectedFields,
+  changedRows: newData,
+  originalRows: oldData
+};
+*/
+exports.dataentry = function(req, res) {
+  const info = req.body;
+  if (!info) return u.error(res, 'Undefined data-entry infos!');
+  if (!info.action) return u.error(res, 'Undefined operation action!');
+  if (!info.datasourceId) return u.error(res, 'Undefined datasource identity!');
+  Scenario.getElement(info.datasourceId, function(err, query){
+    if (err) return u.error(res, err);
+    if (!query) return u.error(res, 'Datasource not found! '+info.datasourceId);
+    const action = _decodeAction(info.action);
+    const o = (query.dataEntryOptions||{})[action];
+    if (!o) return u.error(res, 'Datasource ('+info.datasourceId+') without dataentry options for action "'+action+'"!');
+    if (_.isObject(o) && _.isString(o.script)) {
+      if (!_.isArray(info.changedRows) || (info.changedRows||[]).length<=0) return u.error(res, 'No handled rows!');
+      const seq = u.compose();
+      const result = {
+        affected: 0
+      };
+      info.changedRows.forEach(function(row){
+        seq.use(function(next){
+          const script = _replace(o.script, row);
+          _retrieveData(query, script, function(err, data){
+            if (err) {
+              seq.exit = true;
+              result.error = err;
+            } else {
+              console.log('[DATA-ENTRY] execution data:', data||{});
+              result.affected++;
+            }
+            next();
+          });
+        });
+      });
+      seq.run(function() {
+        result.error ? u.error(res, result.error) : u.ok(res, result);
+      });
+    } else {
+      console.log('[DATA-ENTRY] corrupted options:', o);
+      u.error(res, 'Unrecognized dataentry options for action "'+action+'" on datasource '+info.datasourceId+'!');
+    }
+  });
+};
+
+
+exports.template = function(req, res) {
+  const info = req.body;
+  if (!info) return u.error(res, 'Undefined template infos!');
+  if (!info.action) return u.error(res, 'Undefined template operation action!');
+  if (!info.connection) return u.error(res, 'Undefined connection identity!');
+  if (!info.columns) return u.error(res, 'Undefined fields collection!');
+
+  info.tablename = info.tablename||'{TABLE_NAME}';
+  info.datarow = {};
+  info.indent = true;
+  info.columns.forEach(function(c) {
+    c.COLUMN_NAME = c.COLUMN_NAME||c.name;
+    c.DATA_TYPE = c.DATA_TYPE||'string';
+    info.datarow[c.COLUMN_NAME] = '{{'+c.COLUMN_NAME+'}}';
+  });
+
+  if (!info.key) {
+    info.columns.push({COLUMN_NAME:'KEY_FIELD'});
+    info.key = {'KEY_FIELD':'{{KEY_FIELD}}'};
+  } else if (_.isString(info.key)) {
+    const key = {};
+    info.key.split(',').forEach(function (k) {
+      key[k] = '{{' + k + '}}';
+    });
+    info.key = key;
+  }
+
+  Scenario.getElement(info.connection, function(err, conn) {
+    if (err) return u.error(res, err);
+    manager.getProvider(conn.provider, function (err, provider) {
+      if (err) return u.error(res, err);
+      const action = _decodeAction(info.action);
+      const tmpl = _.isFunction(provider.templatize) ? provider.templatize(action, info) : '';
+      u.ok(res, {template: tmpl});
+    });
   });
 };
 
@@ -3200,18 +3309,22 @@ exports.retrieveData = function(connection, query, sqlstr, esc, cb) {
   });
 };
 
-
+function _delete_sql(options, schema) {
+  const sql_where = [];
+  schema.columns.forEach(function(c){
+    if (_.has(options.key, c.COLUMN_NAME)) {
+      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      if (sql_value) sql_where.push('[' + c.COLUMN_NAME + ']=' + sql_value);
+    }
+  });
+  return options.indent ?
+    'DELETE FROM\n\t[' + options.tablename + ']\nWHERE\n\t' + sql_where.join(' AND\n\t') :
+    'DELETE FROM [' + options.tablename + '] WHERE ' + sql_where.join(' AND ');
+}
 
 exports.remove = function(options, res) {
   onTable(options, res, function(schema) {
-    const sql_where = [];
-    schema.columns.forEach(function(c){
-      if (_.has(options.key, c.COLUMN_NAME)) {
-        var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
-        if (sql_value) sql_where.push('[' + c.COLUMN_NAME + ']=' + sql_value);
-      }
-    });
-    const SQL = 'DELETE FROM [' + options.tablename + '] WHERE ' + sql_where.join(' AND ');
+    const SQL = _delete_sql(options, schema);
     executeSQL(SQL, function(err, result, affected) {
       if (err) return manageError(res, err);
       return u.ok(res, affected);
@@ -3219,23 +3332,29 @@ exports.remove = function(options, res) {
   });
 };
 
+function _insert_sql(options, schema) {
+  const sql_columns = [];
+  const sql_values = [];
+
+  schema.columns.forEach(function(c){
+    if (_.has(options.datarow, c.COLUMN_NAME)) {
+      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      if (sql_value) {
+        sql_columns.push('[' + c.COLUMN_NAME + ']');
+        sql_values.push(sql_value);
+      }
+    }
+  });
+
+  return options.indent ?
+    'INSERT INTO\n\t[' + options.tablename + ']\n\t(\n\t\t' + sql_columns.join(',\n\t\t') + '\n\t)\nVALUES\n\t(\n\t\t' + sql_values.join(',\n\t\t') + '\n\t)\n' :
+    'INSERT INTO [' + options.tablename + '] (' + sql_columns.join(',') + ') VALUES (' + sql_values.join(',') + ')';
+}
+
 exports.insert = function(options, res) {
   const title = LOG_DATAENTRY_PREFIX + '.[insert] ';
   onTable(options, res, function (schema) {
-    const sql_columns = [];
-    const sql_values = [];
-
-    schema.columns.forEach(function(c){
-      if (_.has(options.datarow, c.COLUMN_NAME)) {
-        const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-        if (sql_value) {
-          sql_columns.push('[' + c.COLUMN_NAME + ']');
-          sql_values.push(sql_value);
-        }
-      }
-    });
-
-    const SQL = 'INSERT INTO [' + options.tablename + '] (' + sql_columns.join(',') + ') VALUES (' + sql_values.join(',') + ')';
+    const SQL = _insert_sql(options, schema);
     console.log(title + 'composed sql: ' + SQL);
     executeSQL(SQL, function (err, result, affected) {
       if (err) return manageError(res, err);
@@ -3245,25 +3364,31 @@ exports.insert = function(options, res) {
   });
 };
 
+function _update_sql(options, schema) {
+  const sql_set = [];
+  const sql_where = [];
+  var sql_value = undefined;
+
+  schema.columns.forEach(function(c){
+    if (_.has(options.datarow, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      if (sql_value) sql_set.push('['+ c.COLUMN_NAME+']='+sql_value);
+    }
+    if (_.has(options.key, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      if (sql_value) sql_where.push('['+ c.COLUMN_NAME+']='+sql_value);
+    }
+  });
+
+  return options.indent ?
+    'UPDATE\n\t[' + options.tablename + ']\nSET\n\t' + sql_set.join(',\n\t') + '\nWHERE\n\t' + sql_where.join(' AND\n\t') :
+    'UPDATE [' + options.tablename + '] SET ' + sql_set.join(',') + ' WHERE ' + sql_where.join(' AND ');
+}
+
 exports.update = function(options, res) {
   const title = LOG_DATAENTRY_PREFIX + '.[update] ';
   onTable(options, res, function (schema) {
-    const sql_set = [];
-    const sql_where = [];
-    var sql_value = undefined;
-
-    schema.columns.forEach(function(c){
-      if (_.has(options.datarow, c.COLUMN_NAME)) {
-        sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-        if (sql_value) sql_set.push('['+ c.COLUMN_NAME+']='+sql_value);
-      }
-      if (_.has(options.key, c.COLUMN_NAME)) {
-        sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
-        if (sql_value) sql_where.push('['+ c.COLUMN_NAME+']='+sql_value);
-      }
-    });
-
-    const SQL = 'UPDATE [' + options.tablename + '] SET ' + sql_set.join(',') + ' WHERE ' + sql_where.join(' AND ');
+    const SQL = _update_sql(options, schema);
     console.log(title + 'composed sql: ' + SQL);
     executeSQL(SQL, function (err, result, affected) {
       if (err) return manageError(res, err);
@@ -3307,6 +3432,18 @@ exports.drop = function(options, res) {
       return u.ok(res, affected);
     });
   });
+};
+
+exports.templatize = function(verb, options) {
+  const schema = helper.getTableSchema(options.tablename, options.columns);
+  schema.helper = null;
+  console.log('Schema recuperato verb=%s', verb, options);
+  const o = {
+    insert: _insert_sql,
+    update: _update_sql,
+    delete: _delete_sql
+  };
+  return o[verb](options, schema);
 };
 
 
@@ -3422,7 +3559,7 @@ exports.getTableSchema = function(tablename, columns) {
 
 exports.getSqlValue = function(datatype, value) {
   var type = (datatype || "string").toLowerCase();
-  if (value == null || value == undefined) return null;
+  if (_.isNull(value) || _.isUndefined(value)) return null;
   switch (this.typemap[type]) {
     case 'numeric':
       return value;
@@ -3639,19 +3776,23 @@ exports.retrieveData = function(connection, query, SQL, esc, cb) {
   });
 };
 
-
+function _delete_sql(options, schema) {
+  const sql_where = [];
+  schema.columns.forEach(function(c){
+    if (_.has(options.key, c.COLUMN_NAME)) {
+      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      if (sql_value) sql_where.push(c.COLUMN_NAME + '=' + sql_value);
+    }
+  });
+  return options.indent ?
+    'DELETE FROM\n\t' + options.tablename + '\nWHERE\n\t' + sql_where.join(' AND\n\t') :
+    'DELETE FROM ' + options.tablename + ' WHERE ' + sql_where.join(' AND ');
+}
 
 exports.remove = function(options, res) {
   const config = getConfig(options);
   onTable(config, options.tablename, res, function(schema) {
-    const sql_where = [];
-    schema.columns.forEach(function(c){
-      if (_.has(options.key, c.COLUMN_NAME)) {
-        var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
-        if (sql_value) sql_where.push(c.COLUMN_NAME + '=' + sql_value);
-      }
-    });
-    const SQL = 'DELETE FROM ' + options.tablename + ' WHERE ' + sql_where.join(' AND ');
+    const SQL = _delete_sql(options, schema);
     executeSQL(config, SQL, function(err, result, affected) {
       if (err) return manageError(res, err);
       return u.ok(res, affected);
@@ -3659,24 +3800,30 @@ exports.remove = function(options, res) {
   });
 };
 
+function _insert_sql(options, schema) {
+  const sql_columns = [];
+  const sql_values = [];
+
+  schema.columns.forEach(function(c){
+    if (_.has(options.datarow, c.COLUMN_NAME)) {
+      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      if (sql_value) {
+        sql_columns.push(c.COLUMN_NAME);
+        sql_values.push(sql_value);
+      }
+    }
+  });
+
+  return options.indent ?
+    'INSERT INTO\n\t' + options.tablename + '\n\t(\n\t\t' + sql_columns.join(',\n\t\t') + '\n\t)\nVALUES\n\t(\n\t\t' + sql_values.join(',\n\t\t') + '\n\t)\n' :
+    'INSERT INTO ' + options.tablename + ' (' + sql_columns.join(',') + ') VALUES (' + sql_values.join(',') + ')';
+}
+
 exports.insert = function(options, res) {
   const title = LOG_DATAENTRY_PREFIX + '.[insert] ';
   const config = getConfig(options);
   onTable(config, options.tablename, res, function (schema) {
-    const sql_columns = [];
-    const sql_values = [];
-
-    schema.columns.forEach(function(c){
-      if (_.has(options.datarow, c.COLUMN_NAME)) {
-        const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-        if (sql_value) {
-          sql_columns.push(c.COLUMN_NAME);
-          sql_values.push(sql_value);
-        }
-      }
-    });
-
-    const SQL = 'INSERT INTO ' + options.tablename + ' (' + sql_columns.join(',') + ') VALUES (' + sql_values.join(',') + ')';
+    const SQL = _insert_sql(options, schema);
     console.log(title + 'composed sql: ' + SQL);
     executeSQL(config, SQL, function (err, recordset) {
       if (err) return manageError(res, err);
@@ -3686,26 +3833,31 @@ exports.insert = function(options, res) {
   });
 };
 
+function _update_sql(options, schema) {
+  const sql_set = [];
+  const sql_where = [];
+  var sql_value;
+
+  schema.columns.forEach(function(c){
+    if (_.has(options.datarow, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
+    }
+    if (_.has(options.key, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      if (sql_value) sql_where.push(c.COLUMN_NAME+'='+sql_value);
+    }
+  });
+  return options.indent ?
+    'UPDATE\n\t' + options.tablename + '\nSET\n\t' + sql_set.join(',\n\t') + '\nWHERE\n\t' + sql_where.join(' AND\n\t') :
+    'UPDATE ' + options.tablename + ' SET ' + sql_set.join(',') + ' WHERE ' + sql_where.join(' AND ');
+}
+
 exports.update = function(options, res) {
   const title = LOG_DATAENTRY_PREFIX + '.[update] ';
   const config = getConfig(options);
   onTable(config, options.tablename, res, function (schema) {
-    const sql_set = [];
-    const sql_where = [];
-    var sql_value;
-
-    schema.columns.forEach(function(c){
-      if (_.has(options.datarow, c.COLUMN_NAME)) {
-        sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-        if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
-      }
-      if (_.has(options.key, c.COLUMN_NAME)) {
-        sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
-        if (sql_value) sql_where.push(c.COLUMN_NAME+'='+sql_value);
-      }
-    });
-
-    const SQL = 'UPDATE ' + options.tablename + ' SET ' + sql_set.join(',') + ' WHERE ' + sql_where.join(' AND ');
+    const SQL = _update_sql(options, schema);
     console.log(title + 'composed sql: ' + SQL);
     executeSQL(config, SQL, function (err, recordset) {
       if (err) return manageError(res, err);
@@ -3747,6 +3899,16 @@ exports.drop = function(options, res) {
     console.log(title + 'successfully dropped: ' + recordset.length);
     return u.ok(res, recordset.length);
   });
+};
+
+exports.templatize = function(verb, options) {
+  const schema = helper.getTableSchema(options.tablename, options.columns);
+  const o = {
+    insert: _insert_sql,
+    update: _update_sql,
+    delete: _delete_sql
+  };
+  return o[verb](options, schema);
 };
 
 
@@ -4177,19 +4339,22 @@ exports.retrieveData = function(connection, query, sqlstr, esc, cb) {
 
 
 
-
-
+function _delete_sql(options, schema) {
+  const sql_where = [];
+  schema.columns.forEach(function(c){
+    if (_.has(options.key, c.COLUMN_NAME)) {
+      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      if (sql_value) sql_where.push( c.COLUMN_NAME + '=' + sql_value);
+    }
+  });
+  return options.indent ?
+    'DELETE FROM\n\t' + options.tablename + '\nWHERE\n\t' + sql_where.join(' AND\n\t') :
+    'DELETE FROM ' + options.tablename + ' WHERE ' + sql_where.join(' AND ');
+}
 
 exports.remove = function(options, res) {
   onTable(options, res, function(schema, conn) {
-    const sql_where = [];
-    schema.columns.forEach(function(c){
-      if (_.has(options.key, c.COLUMN_NAME)) {
-        var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
-        if (sql_value) sql_where.push( c.COLUMN_NAME + '=' + sql_value);
-      }
-    });
-    const SQL = 'DELETE FROM ' + options.tablename + ' WHERE ' + sql_where.join(' AND ');
+    const SQL = _delete_sql(options, schema);
     executeSQL(SQL, function(err, result) {
       if (err) return manageError(res, err, conn);
       closeConnection(conn);
@@ -4198,23 +4363,29 @@ exports.remove = function(options, res) {
   });
 };
 
+function _insert_sql(options, schema) {
+  const sql_columns = [];
+  const sql_values = [];
+
+  schema.columns.forEach(function(c){
+    if (_.has(options.datarow, c.COLUMN_NAME)) {
+      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      if (sql_value) {
+        sql_columns.push(c.COLUMN_NAME);
+        sql_values.push(sql_value);
+      }
+    }
+  });
+
+  return options.indent ?
+    'INSERT INTO\n\t' + options.tablename + '\n\t(\n\t\t' + sql_columns.join(',\n\t\t') + '\n\t)\nVALUES\n\t(\n\t\t' + sql_values.join(',\n\t\t') + '\n\t)\n' :
+    'INSERT INTO ' + options.tablename + ' (' + sql_columns.join(',') + ') VALUES (' + sql_values.join(',') + ')';
+}
+
 exports.insert = function(options, res) {
   const title = LOG_DATAENTRY_PREFIX + '.[insert] ';
   onTable(options, res, function (schema, conn) {
-    const sql_columns = [];
-    const sql_values = [];
-
-    schema.columns.forEach(function(c){
-      if (_.has(options.datarow, c.COLUMN_NAME)) {
-        const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-        if (sql_value) {
-          sql_columns.push(c.COLUMN_NAME);
-          sql_values.push(sql_value);
-        }
-      }
-    });
-
-    const SQL = 'INSERT INTO ' + options.tablename + ' (' + sql_columns.join(',') + ') VALUES (' + sql_values.join(',') + ')';
+    const SQL = _insert_sql(options, schema);
     console.log(title + 'composed sql: ' + SQL);
     executeSQL(SQL, function (err, result) {
       if (err) return manageError(res, err, conn);
@@ -4225,25 +4396,31 @@ exports.insert = function(options, res) {
   });
 };
 
+function _update_sql(options, schema) {
+  const sql_set = [];
+  const sql_where = [];
+  var sql_value;
+
+  schema.columns.forEach(function(c){
+    if (_.has(options.datarow, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
+    }
+    if (_.has(options.key, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      if (sql_value) sql_where.push(c.COLUMN_NAME+'='+sql_value);
+    }
+  });
+
+  return options.indent ?
+    'UPDATE\n\t' + options.tablename + '\nSET\n\t' + sql_set.join(',\n\t') + '\nWHERE\n\t' + sql_where.join(' AND\n\t') :
+    'UPDATE ' + options.tablename + ' SET ' + sql_set.join(',') + ' WHERE ' + sql_where.join(' AND ');
+}
+
 exports.update = function(options, res) {
   const title = LOG_DATAENTRY_PREFIX + '.[update] ';
   onTable(options, res, function (schema, conn) {
-    const sql_set = [];
-    const sql_where = [];
-    var sql_value;
-
-    schema.columns.forEach(function(c){
-      if (_.has(options.datarow, c.COLUMN_NAME)) {
-        sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-        if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
-      }
-      if (_.has(options.key, c.COLUMN_NAME)) {
-        sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
-        if (sql_value) sql_where.push(c.COLUMN_NAME+'='+sql_value);
-      }
-    });
-
-    const SQL = 'UPDATE ' + options.tablename + ' SET ' + sql_set.join(',') + ' WHERE ' + sql_where.join(' AND ');
+    const SQL = _update_sql(options, schema);
     console.log(title + 'composed sql: ' + SQL);
     executeSQL(SQL, function (err, result) {
       if (err) return manageError(res, err, conn);
@@ -4289,6 +4466,16 @@ exports.drop = function(options, res) {
       return u.ok(res);
     }, cnn);
   });
+};
+
+exports.templatize = function(verb, options) {
+  const schema = helper.getTableSchema(options.tablename, options.columns);
+  const o = {
+    insert: _insert_sql,
+    update: _update_sql,
+    delete: _delete_sql
+  };
+  return o[verb](options, schema);
 };
 
 
@@ -4797,7 +4984,7 @@ exports.parse = function(doc) {
 "use strict";
 
 
-var express = __webpack_require__(3);
+var express = __webpack_require__(4);
 var controller = __webpack_require__(54);
 var auth = __webpack_require__(8);
 
@@ -4827,7 +5014,7 @@ module.exports = router;
 const _ = __webpack_require__(0);
 var u = __webpack_require__(1);
 var fs = __webpack_require__(5);
-var path = __webpack_require__(4);
+var path = __webpack_require__(3);
 const config = __webpack_require__(2);
 const reporting_path = config.reportingPath || (u.release ? config.serverPath : __dirname);
 
@@ -4920,7 +5107,7 @@ module.exports = require("url");
 "use strict";
 
 
-var express = __webpack_require__(3);
+var express = __webpack_require__(4);
 var passport = __webpack_require__(9);
 var config = __webpack_require__(2);
 var User = __webpack_require__(13);
@@ -4979,7 +5166,7 @@ module.exports = require("passport-local");
 "use strict";
 
 
-var express = __webpack_require__(3);
+var express = __webpack_require__(4);
 var passport = __webpack_require__(9);
 var auth = __webpack_require__(8);
 
