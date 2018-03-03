@@ -1544,12 +1544,12 @@ TableSchema.prototype = {
   name:'',
   columns:[],
   helper: null,
-  getSqlValue: function(col, value) {
+  getSqlValue: function(col, value, template, notnull) {
     var column = _.isObject(col) ? col : _.find(this.columns, function (c) {
       return c.COLUMN_NAME === col;
     });
     return this.helper ?
-      this.helper.getSqlValue(column.DATA_TYPE, value) :
+      this.helper.getSqlValue(column.DATA_TYPE, value, template, notnull) :
       value;
   }
 };
@@ -1561,9 +1561,7 @@ exports.getTableSchema = function(helper, tablename, columns) {
 exports.mergeStr = function(value, template) {
   template = template || '00';
   value = '' + value;
-  if (value.length < template.length)
-    return template.slice(0, -value.length) + value;
-  return value;
+  return (value.length < template.length) ? template.slice(0, -value.length) + value : value;
 };
 
 function _getConstraint(column, others) {
@@ -2982,13 +2980,23 @@ exports.template = function(req, res) {
   info.indent = true;
   info.columns.forEach(function(c) {
     c.COLUMN_NAME = c.COLUMN_NAME||c.name;
-    c.DATA_TYPE = c.DATA_TYPE||'string';
+    c.DATA_TYPE = c.DATA_TYPE||c.type||'string';
     info.datarow[c.COLUMN_NAME] = '{{'+c.COLUMN_NAME+'}}';
   });
 
   if (!info.key) {
-    info.columns.push({COLUMN_NAME:'KEY_FIELD'});
-    info.key = {'KEY_FIELD':'{{KEY_FIELD}}'};
+    const keyc = _.filter(info.columns, function(c){
+      return !!c.identity;
+    });
+    if (keyc.length) {
+      info.key = {};
+      keyc.forEach(function(k) {
+        info.key[k.COLUMN_NAME] = '{{'+k.COLUMN_NAME+'}}';
+      });
+    } else {
+      info.columns.push({COLUMN_NAME:'KEY_FIELD'});
+      info.key = {'KEY_FIELD':'{{KEY_FIELD}}'};
+    }
   } else if (_.isString(info.key)) {
     const key = {};
     info.key.split(',').forEach(function (k) {
@@ -3002,6 +3010,7 @@ exports.template = function(req, res) {
     manager.getProvider(conn.provider, function (err, provider) {
       if (err) return u.error(res, err);
       const action = _decodeAction(info.action);
+      console.log('TEMPLATIZE on provider: %s', conn.provider);
       const tmpl = _.isFunction(provider.templatize) ? provider.templatize(action, info) : '';
       u.ok(res, {template: tmpl});
     });
@@ -3300,11 +3309,11 @@ exports.retrieveData = function(connection, query, sqlstr, esc, cb) {
   });
 };
 
-function _delete_sql(options, schema) {
+function _delete_sql(options, schema, template) {
   const sql_where = [];
   schema.columns.forEach(function(c){
     if (_.has(options.key, c.COLUMN_NAME)) {
-      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME], template, true);
       if (sql_value) sql_where.push('[' + c.COLUMN_NAME + ']=' + sql_value);
     }
   });
@@ -3323,13 +3332,14 @@ exports.remove = function(options, res) {
   });
 };
 
-function _insert_sql(options, schema) {
+function _insert_sql(options, schema, template) {
   const sql_columns = [];
   const sql_values = [];
 
   schema.columns.forEach(function(c){
     if (_.has(options.datarow, c.COLUMN_NAME)) {
-      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      const notnull = _.has(options.key, c.COLUMN_NAME) || !!c.notNull;
+      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME], template, notnull);
       if (sql_value) {
         sql_columns.push('[' + c.COLUMN_NAME + ']');
         sql_values.push(sql_value);
@@ -3355,19 +3365,18 @@ exports.insert = function(options, res) {
   });
 };
 
-function _update_sql(options, schema) {
+function _update_sql(options, schema, template) {
   const sql_set = [];
   const sql_where = [];
   var sql_value = undefined;
 
   schema.columns.forEach(function(c){
-    if (_.has(options.datarow, c.COLUMN_NAME)) {
-      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-      if (sql_value) sql_set.push('['+ c.COLUMN_NAME+']='+sql_value);
-    }
     if (_.has(options.key, c.COLUMN_NAME)) {
-      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME], template, true);
       if (sql_value) sql_where.push('['+ c.COLUMN_NAME+']='+sql_value);
+    } else if (_.has(options.datarow, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME], template, !!c.notNull);
+      if (sql_value) sql_set.push('['+ c.COLUMN_NAME+']='+sql_value);
     }
   });
 
@@ -3427,14 +3436,13 @@ exports.drop = function(options, res) {
 
 exports.templatize = function(verb, options) {
   const schema = helper.getTableSchema(options.tablename, options.columns);
-  schema.helper = null;
-  console.log('Schema recuperato verb=%s', verb, options);
+  //console.log('Schema recuperato verb=%s', verb, options);
   const o = {
     insert: _insert_sql,
     update: _update_sql,
     delete: _delete_sql
   };
-  return o[verb](options, schema);
+  return o[verb](options, schema, true);
 };
 
 
@@ -3548,26 +3556,35 @@ exports.getTableSchema = function(tablename, columns) {
   return helper.getTableSchema(this, tablename, columns);
 };
 
-exports.getSqlValue = function(datatype, value) {
-  var type = (datatype || "string").toLowerCase();
-  if (_.isNull(value) || _.isUndefined(value)) return null;
+exports.getSqlValue = function(datatype, value, template, notnull) {
+  const type = (datatype || "string").toLowerCase();
+  template = !!template;
+  if (!template && (_.isNull(value) || _.isUndefined(value))) return null;
   switch (this.typemap[type]) {
     case 'numeric':
-      return value;
+      return template ?
+        (notnull ? value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE '+value+' END') :
+        value;
     case 'string':
-      return "'" + (value.replace(/'/g, '\'\'')) + "'";
+      return template ?
+        (notnull ? '\''+value+'\'' : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE \''+value+'\' END') :
+        '\'' + value.replace(/'/g, '\'\'') + '\'';
     case 'nstring':
-      return "N'" + (value.replace(/'/g, '\'\'')) + "'";
+      return template ?
+        (notnull ? 'N\''+value+'\'' : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE N\''+value+'\' END') :
+        'N\'' + value.replace(/'/g, '\'\'') + '\'';
     case 'date':
-      if (_.isDate(value))
-        return 'CONVERT(datetime, ' + get126DateString(value) + ', 126)';
-      return '' + value;
+      return template ?
+        (notnull ?
+          'CONVERT(datetime, \''+value+'\', 126)' :
+          'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE CONVERT(datetime, \''+value+'\', 126) END') :
+        (_.isDate(value) ? 'CONVERT(datetime, ' + (template ? value : get126DateString(value)) + ', 126)' : 'NULL');
     case 'object':
-      if (Buffer.isBuffer(value))
-        return "0x" + (value.toString('hex'));
-      return null;
+      return template ?
+        (notnull ? '0x' + value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE 0x' + value + ' END') :
+        (Buffer.isBuffer(value) ? '0x' + value.toString('hex') : 'NULL');
     default:
-      return null;
+      return 'NULL';
   }
 };
 
@@ -3767,11 +3784,11 @@ exports.retrieveData = function(connection, query, SQL, esc, cb) {
   });
 };
 
-function _delete_sql(options, schema) {
+function _delete_sql(options, schema, template) {
   const sql_where = [];
   schema.columns.forEach(function(c){
     if (_.has(options.key, c.COLUMN_NAME)) {
-      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME], template, true);
       if (sql_value) sql_where.push(c.COLUMN_NAME + '=' + sql_value);
     }
   });
@@ -3791,13 +3808,14 @@ exports.remove = function(options, res) {
   });
 };
 
-function _insert_sql(options, schema) {
+function _insert_sql(options, schema, template) {
   const sql_columns = [];
   const sql_values = [];
 
   schema.columns.forEach(function(c){
     if (_.has(options.datarow, c.COLUMN_NAME)) {
-      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      const notnull = _.has(options.key, c.COLUMN_NAME) || !!c.notNull;
+      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME], template, notnull);
       if (sql_value) {
         sql_columns.push(c.COLUMN_NAME);
         sql_values.push(sql_value);
@@ -3824,19 +3842,18 @@ exports.insert = function(options, res) {
   });
 };
 
-function _update_sql(options, schema) {
+function _update_sql(options, schema, template) {
   const sql_set = [];
   const sql_where = [];
   var sql_value;
 
   schema.columns.forEach(function(c){
-    if (_.has(options.datarow, c.COLUMN_NAME)) {
-      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-      if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
-    }
     if (_.has(options.key, c.COLUMN_NAME)) {
-      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME], template, true);
       if (sql_value) sql_where.push(c.COLUMN_NAME+'='+sql_value);
+    } else if (_.has(options.datarow, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME], template, !!c.notNull);
+      if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
     }
   });
   return options.indent ?
@@ -3899,7 +3916,7 @@ exports.templatize = function(verb, options) {
     update: _update_sql,
     delete: _delete_sql
   };
-  return o[verb](options, schema);
+  return o[verb](options, schema, true);
 };
 
 
@@ -4038,26 +4055,35 @@ exports.parseType = function(code) {
 exports.getTableSchema = function(tablename, columns) {
   return helper.getTableSchema(this, tablename, columns);
 };
-exports.getSqlValue = function(code, value) {
+exports.getSqlValue = function(code, value, template, notnull) {
   var type = (code || "254").toLowerCase();
-  if (value == null || value == undefined) return null;
+  template = !!template;
+  if (!template && (_.isNull(value) || _.isUndefined(value))) return 'NULL';
   switch (this.jstypemap[type]) {
     case 'numeric':
-      return value;
+      return template ?
+        (notnull ? value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE '+value+' END CASE') :
+        value;
     case 'string':
-      return "'" + (value.replace(/'/g, '\'\'')) + "'";
+      return template ?
+        (notnull ? '\''+value+'\'' : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE \''+value+'\' END CASE') :
+        '\'' + value.replace(/'/g, '\'\'') + '\'';
     case 'nstring':
-      return "N'" + (value.replace(/'/g, '\'\'')) + "'";
+      return template ?
+        (notnull ? 'N\''+value+'\'' : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE N\''+value+'\' END CASE') :
+        'N\'' + value.replace(/'/g, '\'\'') + '\'';
     case 'date':
-      if (_.isDate(value))
-        return 'str_to_date(\'' + getDateString(value) + '\', \'%Y-%m-%d %H:%i:%s\')';
-      return '' + value;
+      return template ?
+        (notnull ?
+          'str_to_date(\''+value+'\', \'%Y-%m-%d %H:%i:%s\')' :
+          'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE str_to_date(\''+value+'\', \'%Y-%m-%d %H:%i:%s\') END CASE') :
+        (_.isDate(value) ? 'str_to_date(\'' + getDateString(value) + '\', \'%Y-%m-%d %H:%i:%s\')' : 'NULL');
     case 'object':
-      if (Buffer.isBuffer(value))
-        return "0x" + (value.toString('hex'));
-      return null;
+      return template ?
+        (notnull ? '0x' + value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE 0x' + value + ' END CASE') :
+        (Buffer.isBuffer(value) ? '0x' + value.toString('hex') : 'NULL');
     default:
-      return null;
+      return 'NULL';
   }
 };
 exports.validateCreateTable = helper.validateCreateTable;
@@ -4330,11 +4356,11 @@ exports.retrieveData = function(connection, query, sqlstr, esc, cb) {
 
 
 
-function _delete_sql(options, schema) {
+function _delete_sql(options, schema, template) {
   const sql_where = [];
   schema.columns.forEach(function(c){
     if (_.has(options.key, c.COLUMN_NAME)) {
-      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      var sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME], template, true);
       if (sql_value) sql_where.push( c.COLUMN_NAME + '=' + sql_value);
     }
   });
@@ -4354,13 +4380,14 @@ exports.remove = function(options, res) {
   });
 };
 
-function _insert_sql(options, schema) {
+function _insert_sql(options, schema, template) {
   const sql_columns = [];
   const sql_values = [];
 
   schema.columns.forEach(function(c){
     if (_.has(options.datarow, c.COLUMN_NAME)) {
-      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
+      const notnull = _.has(options.key, c.COLUMN_NAME) || !!c.notNull;
+      const sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME], template, notnull);
       if (sql_value) {
         sql_columns.push(c.COLUMN_NAME);
         sql_values.push(sql_value);
@@ -4387,19 +4414,18 @@ exports.insert = function(options, res) {
   });
 };
 
-function _update_sql(options, schema) {
+function _update_sql(options, schema, template) {
   const sql_set = [];
   const sql_where = [];
   var sql_value;
 
   schema.columns.forEach(function(c){
-    if (_.has(options.datarow, c.COLUMN_NAME)) {
-      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME]);
-      if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
-    }
     if (_.has(options.key, c.COLUMN_NAME)) {
-      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME]);
+      sql_value = schema.getSqlValue(c, options.key[c.COLUMN_NAME], template, true);
       if (sql_value) sql_where.push(c.COLUMN_NAME+'='+sql_value);
+    } else if (_.has(options.datarow, c.COLUMN_NAME)) {
+      sql_value = schema.getSqlValue(c, options.datarow[c.COLUMN_NAME], template, !!c.notNull);
+      if (sql_value) sql_set.push(c.COLUMN_NAME+'='+sql_value);
     }
   });
 
@@ -4466,7 +4492,7 @@ exports.templatize = function(verb, options) {
     update: _update_sql,
     delete: _delete_sql
   };
-  return o[verb](options, schema);
+  return o[verb](options, schema, true);
 };
 
 
@@ -4608,26 +4634,35 @@ exports.parseType = function(code) {
 exports.getTableSchema = function(tablename, columns) {
   return helper.getTableSchema(this, tablename, columns);
 };
-exports.getSqlValue = function(code, value) {
+exports.getSqlValue = function(code, value, template, notnull) {
   var type = (code || "254").toLowerCase();
-  if (value == null || value == undefined) return null;
+  template = !!template;
+  if (!template && (_.isNull(value) || _.isUndefined(value))) return 'NULL';
   switch (this.jstypemap[type]) {
     case 'numeric':
-      return value;
+      return template ?
+        (notnull ? value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE '+value+' END') :
+        value;
     case 'string':
-      return "'" + (value.replace(/'/g, '\'\'')) + "'";
+      return template ?
+        (notnull ? '\''+value+'\'' : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE \''+value+'\' END') :
+        '\'' + value.replace(/'/g, '\'\'') + '\'';
     case 'nstring':
-      return "N'" + (value.replace(/'/g, '\'\'')) + "'";
+      return template ?
+        (notnull ? 'N\''+value+'\'' : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE N\''+value+'\' END') :
+        'N\'' + value.replace(/'/g, '\'\'') + '\'';
     case 'date':
-      if (_.isDate(value))
-        return 'TO_DATE(\'' + getDateString(value) + '\',\'YYYY-MM-DD HH24:MI:SS\')';
-      return '' + value;
+      return template ?
+        (notnull ?
+          'TO_DATE(\''+value+'\',\'YYYY-MM-DD HH24:MI:SS\')':
+          'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE TO_DATE(\''+value+'\',\'YYYY-MM-DD HH24:MI:SS\') END') :
+        (_.isDate(value) ? 'TO_DATE(\'' + getDateString(value) + '\',\'YYYY-MM-DD HH24:MI:SS\')' : 'NULL');
     case 'object':
-      if (Buffer.isBuffer(value))
-        return "0x" + (value.toString('hex'));
-      return null;
+      return template ?
+        (notnull ? '0x' + value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE 0x' + value + ' END') :
+        (Buffer.isBuffer(value) ? '0x' + value.toString('hex') : 'NULL');
     default:
-      return null;
+      return 'NULL';
   }
 };
 

@@ -689,8 +689,8 @@ var CanDeactivateEditor = (function () {
                 ok: 'Yes',
                 no: 'No',
                 cancel: 'Cancel'
-            }, function (resp) {
-                switch (resp) {
+            }, function (data) {
+                switch (data.resp) {
                     case 'ok':
                         self.browser.saveAll().then(function () { return resolve(true); });
                         break;
@@ -782,7 +782,7 @@ var CartComponent = (function () {
 /***/ "../../../../../src/app/components/confirm-dialog/confirm-dialog.component.html":
 /***/ (function(module, exports) {
 
-module.exports = "<h1 *ngIf=\"!!data.title\">{{data.title}}</h1>\n<div mat-dialog-content class=\"confirm-message\">{{data.message}}</div>\n<div mat-dialog-actions>\n  <button *ngIf=\"data['ok']\" color=\"accent\" mat-button cdkFocusInitial (click)=\"onClick('ok')\">{{data['ok'] || 'Ok'}}</button>\n  <button *ngIf=\"data['no']\" mat-button (click)=\"onClick('no')\">{{data['no'] || 'No'}}</button>\n  <button *ngIf=\"data['cancel']\" mat-button (click)=\"onClick('cancel')\">{{data['cancel'] || 'Cancel'}}</button>\n</div>\n"
+module.exports = "<h1 *ngIf=\"!!data.title\">{{data.title}}</h1>\n<div mat-dialog-content>\n  <div class=\"confirm-message\">{{data.message}}</div>\n  <input matInput *ngIf=\"data.withValue\" class=\"confirm-value\" placeholder=\"{{data.placeholder||'value...'}}\" [(ngModel)]=\"data.value\">\n</div>\n<div mat-dialog-actions>\n  <button *ngIf=\"data['ok']\" color=\"accent\" mat-button cdkFocusInitial (click)=\"onClick('ok')\">{{data['ok'] || 'Ok'}}</button>\n  <button *ngIf=\"data['no']\" mat-button (click)=\"onClick('no')\">{{data['no'] || 'No'}}</button>\n  <button *ngIf=\"data['cancel']\" mat-button (click)=\"onClick('cancel')\">{{data['cancel'] || 'Cancel'}}</button>\n</div>\n"
 
 /***/ }),
 
@@ -813,7 +813,8 @@ var ConfirmDialogComponent = (function () {
         this.data = data;
     }
     ConfirmDialogComponent.prototype.onClick = function (resp) {
-        this.dialogRef.close(resp);
+        this.data.resp = resp;
+        this.dialogRef.close(this.data);
     };
     ConfirmDialogComponent = __decorate([
         Object(__WEBPACK_IMPORTED_MODULE_0__angular_core__["Component"])({
@@ -2232,8 +2233,8 @@ var DocumentsComponent = (function () {
                             message: 'Save document modifies?',
                             ok: 'Ok',
                             cancel: 'Cancel'
-                        }, function (resp) {
-                            if (resp === 'ok') {
+                        }, function (data) {
+                            if (data.resp === 'ok') {
                                 self.browser.current = JSON.parse(self.browser.current_str);
                                 self.browser.save('Document successfully updated!');
                             }
@@ -3123,7 +3124,7 @@ exports = module.exports = __webpack_require__("../../../../css-loader/lib/css-b
 
 
 // module
-exports.push([module.i, ".schema {\r\n  font-family: monospace;\r\n  position: relative; }\r\n  .schema .index {\r\n    width: 40px;\r\n    opacity: .3;\r\n    font-size: .8em;\r\n    margin-left: -20px; }\r\n  .schema .name {\r\n    width: 30%; }\r\n  .schema .type,\r\n  .schema .length {\r\n    width: 10%; }\r\n  .schema .mat-list-item {\r\n    border-bottom: #555 1px solid; }\r\n\r\n.executed-code {\r\n  font-size: .9em;\r\n  opacity: .7;\r\n  color: gold; }\r\n\r\n.result-table {\r\n  width: 100%;\r\n  min-width: 848px;\r\n  height: auto;\r\n  overflow-x: auto; }\r\n  .result-table .table-container {\r\n    overflow: auto; }\r\n    .result-table .table-container table {\r\n      border-collapse: collapse;\r\n      width: 100%; }\r\n    .result-table .table-container td, .result-table .table-container th {\r\n      border: 1px solid rgba(200, 200, 200, 0.05);\r\n      text-align: left;\r\n      padding: 8px;\r\n      min-width: 120px;\r\n      max-width: 400px;\r\n      overflow: hidden;\r\n      white-space: pre-wrap;\r\n      text-overflow: ellipsis; }\r\n    .result-table .table-container tr:nth-child(even) {\r\n      background-color: rgba(1, 1, 1, 0.1); }\r\n  .result-table .table-navigator {\r\n    line-height: 40px;\r\n    height: 40px; }\r\n\r\n.query-editor > .error {\r\n  padding: 10px;\r\n  background-color: #7b000017; }\r\n.query-editor .play-button {\r\n  position: absolute;\r\n  right: 270px;\r\n  bottom: 5px;\r\n  opacity: .4; }\r\n  .query-editor .play-button:not([disabled]):hover {\r\n    opacity: 1; }\r\n.query-editor .query-editor-container {\r\n  position: relative; }\r\n  .query-editor .query-editor-container app-schema-browser,\r\n  .query-editor .query-editor-container app-fields-browser {\r\n    position: absolute;\r\n    top: 0;\r\n    right: 0;\r\n    height: 100%;\r\n    border-left: #333 4px solid;\r\n    z-index: 10;\r\n    background-color: #242424; }\r\n.query-editor .query-editor-parameters {\r\n  width: 848px; }\r\n  .query-editor .query-editor-parameters * {\r\n    line-height: 40px; }\r\n  .query-editor .query-editor-parameters .query-parameter {\r\n    height: 40px;\r\n    position: relative;\r\n    padding: 0 110px 0 10px;\r\n    margin-bottom: 4px; }\r\n    .query-editor .query-editor-parameters .query-parameter .query-parameter-toolbar {\r\n      position: absolute;\r\n      right: 0;\r\n      top: 0;\r\n      height: 40px;\r\n      padding: 0 10px; }\r\n    .query-editor .query-editor-parameters .query-parameter .value {\r\n      opacity: .3; }\r\n    .query-editor .query-editor-parameters .query-parameter .type {\r\n      opacity: .3;\r\n      display: inline-block;\r\n      right: 130px;\r\n      position: absolute; }\r\n.query-editor .toolbar-editor-button .editor-button {\r\n  background-color: transparent;\r\n  box-shadow: none; }\r\n.query-editor .on-left {\r\n  float: left;\r\n  padding: 0 20px; }\r\n\r\n.prp .prp-name {\r\n  font-size: .8em;\r\n  opacity: .5;\r\n  font-variant: small-caps;\r\n  min-width: 200px;\r\n  display: inline-block; }\r\n.prp .prp-value {\r\n  color: gold; }\r\n", ""]);
+exports.push([module.i, ".schema {\r\n  font-family: monospace;\r\n  position: relative; }\r\n  .schema .index {\r\n    width: 40px;\r\n    opacity: .3;\r\n    font-size: .8em;\r\n    margin-left: -20px; }\r\n  .schema .name {\r\n    width: 30%; }\r\n  .schema .type,\r\n  .schema .length {\r\n    width: 10%; }\r\n  .schema .mat-list-item {\r\n    border-bottom: #555 1px solid; }\r\n\r\n.executed-code {\r\n  font-size: .9em;\r\n  opacity: .7;\r\n  color: gold; }\r\n\r\n.result-table {\r\n  width: 100%;\r\n  min-width: 848px;\r\n  height: auto;\r\n  overflow-x: auto; }\r\n  .result-table .table-container {\r\n    overflow: auto; }\r\n    .result-table .table-container table {\r\n      border-collapse: collapse;\r\n      width: 100%; }\r\n    .result-table .table-container td, .result-table .table-container th {\r\n      border: 1px solid rgba(200, 200, 200, 0.05);\r\n      text-align: left;\r\n      padding: 8px;\r\n      min-width: 120px;\r\n      max-width: 400px;\r\n      overflow: hidden;\r\n      white-space: pre-wrap;\r\n      text-overflow: ellipsis; }\r\n    .result-table .table-container tr:nth-child(even) {\r\n      background-color: rgba(1, 1, 1, 0.1); }\r\n  .result-table .table-navigator {\r\n    line-height: 40px;\r\n    height: 40px; }\r\n\r\n.query-editor > .error {\r\n  padding: 10px;\r\n  background-color: #7b000017; }\r\n.query-editor .play-button {\r\n  position: absolute;\r\n  right: 270px;\r\n  bottom: 5px;\r\n  opacity: .4;\r\n  z-index: 10; }\r\n  .query-editor .play-button:not([disabled]):hover {\r\n    opacity: 1; }\r\n.query-editor .query-editor-container {\r\n  position: relative; }\r\n  .query-editor .query-editor-container app-schema-browser,\r\n  .query-editor .query-editor-container app-fields-browser {\r\n    position: absolute;\r\n    top: 0;\r\n    right: 0;\r\n    height: 100%;\r\n    border-left: #333 4px solid;\r\n    z-index: 10;\r\n    background-color: #242424; }\r\n.query-editor .query-editor-parameters {\r\n  width: 848px; }\r\n  .query-editor .query-editor-parameters * {\r\n    line-height: 40px; }\r\n  .query-editor .query-editor-parameters .query-parameter {\r\n    height: 40px;\r\n    position: relative;\r\n    padding: 0 110px 0 10px;\r\n    margin-bottom: 4px; }\r\n    .query-editor .query-editor-parameters .query-parameter .query-parameter-toolbar {\r\n      position: absolute;\r\n      right: 0;\r\n      top: 0;\r\n      height: 40px;\r\n      padding: 0 10px; }\r\n    .query-editor .query-editor-parameters .query-parameter .value {\r\n      opacity: .3; }\r\n    .query-editor .query-editor-parameters .query-parameter .type {\r\n      opacity: .3;\r\n      display: inline-block;\r\n      right: 130px;\r\n      position: absolute; }\r\n.query-editor .toolbar-editor-button .editor-button {\r\n  background-color: transparent;\r\n  box-shadow: none; }\r\n.query-editor .on-left {\r\n  float: left;\r\n  padding: 0 20px; }\r\n\r\n.prp .prp-name {\r\n  font-size: .8em;\r\n  opacity: .5;\r\n  font-variant: small-caps;\r\n  min-width: 200px;\r\n  display: inline-block; }\r\n.prp .prp-value {\r\n  color: gold; }\r\n", ""]);
 
 // exports
 
@@ -3212,6 +3213,7 @@ var QueriesComponent = (function () {
                 self.idle = false;
                 self.result_str = '';
                 self.result = null;
+                self.browser.current._tablename = null;
                 self.browser.current._editor = EDITOR_TYPES.get;
                 self.browser.current.dataentryOptions = self.browser.current.dataentryOptions || {};
                 __WEBPACK_IMPORTED_MODULE_8_lodash___default.a.keys(EDITOR_TYPES).forEach(function (k) { return self.browser.current.dataentryOptions[k] = self.browser.current.dataentryOptions[k] || ''; });
@@ -3416,41 +3418,49 @@ var QueriesComponent = (function () {
     };
     QueriesComponent.prototype.toggleDataEntry = function () {
         var _this = this;
+        var self = this;
         if (this.dataEntryActive) {
-            this.dataEntryActive = false;
-            __WEBPACK_IMPORTED_MODULE_8_lodash___default.a.keys(EDITOR_TYPES).forEach(function (k) { return _this.browser.current.dataentryOptions[k] = ''; });
+            self.u.confirm({
+                message: 'All data-entry scripts will be deleted, do you want to continue?',
+                ok: 'Yes',
+                cancel: 'No'
+            }, function (data) {
+                if (data.resp === 'ok') {
+                    _this.dataEntryActive = false;
+                    _this.browser.current._editor = EDITOR_TYPES.get;
+                    __WEBPACK_IMPORTED_MODULE_8_lodash___default.a.keys(EDITOR_TYPES).forEach(function (k) { return _this.browser.current.dataentryOptions[k] = ''; });
+                }
+            });
         }
         else {
             this.dataEntryActive = true;
         }
     };
-    QueriesComponent.prototype._generate = function () {
-        var self = this;
-        self.interaction.templatize({
-            action: (self.browser.current || {})._editor,
-            columns: (self.browser.current || {}).columns,
-            connection: (self.browser.current || {}).connection
-        }, function (err, r) {
-            if ((r || {}).template) {
-                self.browser.current.dataentryOptions[self.browser.current._editor] = r.template;
-            }
-        });
-    };
     QueriesComponent.prototype.generate = function () {
         var self = this;
         var current = self.browser.current.dataentryOptions[self.browser.current._editor];
-        if (current) {
-            self.u.confirm({
-                message: 'Current script will be overwritten, do you want to continue?',
-                ok: 'Yes',
-                cancel: 'No'
-            }, function (resp) {
-                (resp === 'ok') ? self._generate() : self.u.noop();
-            });
-        }
-        else {
-            self._generate();
-        }
+        self.u.confirm({
+            message: (current ? 'Current script will be overwritten!\n' : '') + 'Specify a table name (optional)',
+            ok: 'Ok',
+            cancel: 'Cancel',
+            withValue: true,
+            placeholder: 'undefined',
+            value: self.browser.current._tablename || ''
+        }, function (data) {
+            if (data.resp === 'ok') {
+                self.browser.current._tablename = data.value || '';
+                self.interaction.templatize({
+                    action: (self.browser.current || {})._editor,
+                    columns: (self.browser.current || {}).columns,
+                    connection: (self.browser.current || {}).connection,
+                    tablename: data.value
+                }, function (err, r) {
+                    if ((r || {}).template) {
+                        self.browser.current.dataentryOptions[self.browser.current._editor] = r.template;
+                    }
+                });
+            }
+        });
     };
     QueriesComponent.prototype.ngOnInit = function () {
         this.ready = true;
@@ -4504,8 +4514,8 @@ var BrowserService = (function () {
             message: message || 'Delete current document?',
             ok: 'Ok',
             cancel: 'Cancel'
-        }, function (resp) {
-            if (resp === 'ok') {
+        }, function (data) {
+            if (data.resp === 'ok') {
                 if (self.current._new) {
                     self._delete();
                 }
