@@ -2841,10 +2841,10 @@ exports.execute = function(req, res) {
       u.ok(res, result);
     });
   } else {
-    Scenario.getElement(info, function (err, doc) {
+    Scenario.getElement(info, function (err, query) {
       if (err) return u.error(res, err);
-      console.log('prepare calc: ', doc);
-      _calcResult(req, res, doc, info.parameters || []);
+      console.log('prepare calc: ', query);
+      _calcResult(req, res, query, info.parameters || []);
     });
   }
 };
@@ -2914,10 +2914,11 @@ function _decodeAction(action) {
   }
 }
 
-function _replace(sql, row) {
+function _replace(entry, sql, row) {
   _.keys(row || {}).forEach(function (k) {
     const rgx = new RegExp('{{=?' + k + '}}', 'gi');
-    sql = sql.replace(rgx, row[k]);
+    const value = entry.provider.helper.getSqlTypedValue(row[k], entry.types[k]);
+    sql = sql.replace(rgx, value);
   });
   return sql;
 }
@@ -2938,31 +2939,54 @@ exports.entry = function(req, res) {
     if (_.isString(statement)) {
       if (!info.changedRows) return u.error(res, 'No handled rows!');
       if (!_.isArray(info.changedRows)) info.changedRows = [info.changedRows];
-      const seq = u.compose();
-      const result = {
-        affected: 0
+      const entry = {
+        types: {},
+        result: {
+          affected: 0
+        }
       };
+      // mappa i tipi dati per campo dello schema
+      (query.columns||query.schema||[]).forEach(function(c){
+        entry.types[c.name] = c.type;
+      });
+      // recupera connection e provider
+      const seq = u.compose()
+        .use(function(next){
+          Scenario.getElement(query.connection, function(err, conn){
+            if (err) return u.error(res, err);
+            if (!conn.active) return u.error(res, 'Connection seems not active!');
+            entry.conn = conn;
+            manager.getProvider(conn.provider, function(err, provider){
+              if (err) return u.error(res, err);
+              entry.provider = provider;
+              next();
+            });
+          });
+        });
+      // per ogni record modificato genera ed esegue lo script
       info.changedRows.forEach(function(row){
         seq.use(function(next){
-          const script = _replace(statement, row);
-          _retrieveData(query, script, function(err, data){
+          const sqlstr = _replace(entry, statement, row);
+          _esecution++;
+          entry.provider.retrieveData(entry.conn, query, sqlstr, _esecution, function(err, data){
             if (err) {
               seq.exit = true;
-              result.error = err;
+              entry.error = err;
             } else {
               console.log('[DATA-ENTRY] execution data:', data||{});
-              result.affected++;
+              entry.result.affected++;
             }
             next();
           });
         });
       });
+      // notifica i risultati
       seq.run(function() {
-        result.error ? u.error(res, result.error) : u.ok(res, result);
+        entry.error ? u.error(res, entry.error) : u.ok(res, entry.result);
       });
     } else {
       console.log('[DATA-ENTRY] corrupted options:', o);
-      u.error(res, 'Unrecognized dataentry options for action "'+action+'" on datasource '+info.datasourceId+'!');
+      u.error(res, 'Unrecognized data-entry options for action "'+action+'" on datasource '+info.datasourceId+'!');
     }
   });
 };
@@ -3456,7 +3480,7 @@ var helper = __webpack_require__(10);
 var _ = __webpack_require__(0);
 
 
-function get126DateString(date) {
+function _get126DateString(date) {
   if (!_.isDate(date))
     return '' + date;
   return date.getFullYear() + '-' + helper.mergeStr(date.getMonth() + 1) + '-' + helper.mergeStr(date.getDate()) + 'T' +
@@ -3578,7 +3602,7 @@ exports.getSqlValue = function(datatype, value, template, notnull) {
         (notnull ?
           'CONVERT(datetime, \''+value+'\', 126)' :
           'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE CONVERT(datetime, \''+value+'\', 126) END') :
-        (_.isDate(value) ? 'CONVERT(datetime, ' + (template ? value : get126DateString(value)) + ', 126)' : 'NULL');
+        (_.isDate(value) ? 'CONVERT(datetime, ' + (template ? value : _get126DateString(value)) + ', 126)' : 'NULL');
     case 'object':
       return template ?
         (notnull ? '0x' + value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE 0x' + value + ' END') :
@@ -3602,6 +3626,18 @@ exports.getDropSql = function(schema) {
   return helper.getDropSql(schema, _getName)
 };
 
+exports.getSqlTypedValue = function(v, type) {
+  type = this.typemap[type]||type;
+  switch(type) {
+    case 'string':
+      return (v||'').replace(/'/g, '\'\'');
+    case 'date':
+      return _get126DateString(v);
+    case 'object':
+      return v.toString('hex');
+    default: return v;
+  }
+};
 
 
 /***/ }),
@@ -3930,7 +3966,7 @@ exports.templatize = function(verb, options) {
 var helper = __webpack_require__(10);
 var _ = __webpack_require__(0);
 
-function getDateString(date) {
+function _getDateString(date) {
   if (!_.isDate(date))
     return '' + date;
   return date.getFullYear() + '-' + helper.mergeStr(date.getMonth() + 1) + '-' + helper.mergeStr(date.getDate()) + ' ' +
@@ -4059,7 +4095,7 @@ exports.getSqlValue = function(code, value, template, notnull) {
   var type = (code || "254").toLowerCase();
   template = !!template;
   if (!template && (_.isNull(value) || _.isUndefined(value))) return 'NULL';
-  switch (this.jstypemap[type]) {
+  switch (jstypemap[type]) {
     case 'numeric':
       return template ?
         (notnull ? value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE '+value+' END CASE') :
@@ -4077,7 +4113,7 @@ exports.getSqlValue = function(code, value, template, notnull) {
         (notnull ?
           'str_to_date(\''+value+'\', \'%Y-%m-%d %H:%i:%s\')' :
           'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE str_to_date(\''+value+'\', \'%Y-%m-%d %H:%i:%s\') END CASE') :
-        (_.isDate(value) ? 'str_to_date(\'' + getDateString(value) + '\', \'%Y-%m-%d %H:%i:%s\')' : 'NULL');
+        (_.isDate(value) ? 'str_to_date(\'' + _getDateString(value) + '\', \'%Y-%m-%d %H:%i:%s\')' : 'NULL');
     case 'object':
       return template ?
         (notnull ? '0x' + value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE 0x' + value + ' END CASE') :
@@ -4092,6 +4128,19 @@ exports.getCreateTableSql = function(schema) {
 };
 
 exports.getDropSql = helper.getDropSql;
+
+exports.getSqlTypedValue = function(v, type) {
+  type = jstypemap[type]||type;
+  switch(type) {
+    case 'string':
+      return (v||'').replace(/'/g, '\'\'');
+    case 'date':
+      return _getDateString(v);
+    case 'object':
+      return v.toString('hex');
+    default: return v;
+  }
+};
 
 
 /***/ }),
@@ -4506,7 +4555,7 @@ exports.templatize = function(verb, options) {
 var helper = __webpack_require__(10);
 var _ = __webpack_require__(0);
 
-function getDateString(date) {
+function _getDateString(date) {
   if (!_.isDate(date))
     return '' + date;
   return date.getFullYear() + '-' + helper.mergeStr(date.getMonth() + 1) + '-' + helper.mergeStr(date.getDate()) + ' ' +
@@ -4638,7 +4687,7 @@ exports.getSqlValue = function(code, value, template, notnull) {
   var type = (code || "254").toLowerCase();
   template = !!template;
   if (!template && (_.isNull(value) || _.isUndefined(value))) return 'NULL';
-  switch (this.jstypemap[type]) {
+  switch (jstypemap[type]) {
     case 'numeric':
       return template ?
         (notnull ? value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE '+value+' END') :
@@ -4656,7 +4705,7 @@ exports.getSqlValue = function(code, value, template, notnull) {
         (notnull ?
           'TO_DATE(\''+value+'\',\'YYYY-MM-DD HH24:MI:SS\')':
           'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE TO_DATE(\''+value+'\',\'YYYY-MM-DD HH24:MI:SS\') END') :
-        (_.isDate(value) ? 'TO_DATE(\'' + getDateString(value) + '\',\'YYYY-MM-DD HH24:MI:SS\')' : 'NULL');
+        (_.isDate(value) ? 'TO_DATE(\'' + _getDateString(value) + '\',\'YYYY-MM-DD HH24:MI:SS\')' : 'NULL');
     case 'object':
       return template ?
         (notnull ? '0x' + value : 'CASE WHEN \''+value+'\' = \'null\' THEN NULL ELSE 0x' + value + ' END') :
@@ -4706,6 +4755,18 @@ exports.getDropSql = function(schema) {
   return helper.getDropSql(schema, _getName)
 };
 
+exports.getSqlTypedValue = function(v, type) {
+  type = jstypemap[type]||type;
+  switch(type) {
+    case 'string':
+      return (v||'').replace(/'/g, '\'\'');
+    case 'date':
+      return _getDateString(v);
+    case 'object':
+      return v.toString('hex');
+    default: return v;
+  }
+};
 
 
 /***/ }),

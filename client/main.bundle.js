@@ -608,7 +608,7 @@ var ApiTesterComponent = (function () {
 /***/ "../../../../../src/app/components/browser/browser.component.html":
 /***/ (function(module, exports) {
 
-module.exports = "<div class=\"toolbox float-left page-items-browser\">\n  <div class=\"toolbox-header\">\n    <input placeholder=\"search...\" [(ngModel)]=\"searchTerm\" (change)=\"refresh()\">\n    <button *ngIf=\"searchTerm\" class=\"clear-button\" mat-icon-button (click)=\"clear()\">\n      <mat-icon aria-label=\"clear button\">close</mat-icon>\n    </button>\n  </div>\n  <div class=\"toolbox-items echo-scrollbar\">\n    <mat-spinner *ngIf=\"browser.idle\"></mat-spinner>\n    <mat-nav-list *ngIf=\"!browser.idle\">\n      <mat-list-item *ngFor=\"let d of documents\" (click)=\"browser.navigate(d)\" [ngClass]=\"{'accent':(browser.current||{})._id === d._id}\">\n        <mat-icon *ngIf=\"browser.options.icon\" [ngClass]=\"{'warn-color':!!d._new}\"\n                  aria-label=\"current scenario\">{{browser.options.icon}}</mat-icon>\n        <span class=\"browser-item-content\">{{d[browser.options.namePrp]||d._id}}<span class=\"new-element\" *ngIf=\"d._new\"> (new)</span></span>\n        <div *ngIf=\"browser.options.description\" class=\"browser-item-description\">{{browser.options.description(d)}}</div>\n      </mat-list-item>\n    </mat-nav-list>\n  </div>\n</div>\n"
+module.exports = "<div class=\"toolbox float-left page-items-browser\">\n  <div class=\"toolbox-header\">\n    <input placeholder=\"search...\" [(ngModel)]=\"searchTerm\" (change)=\"refresh()\">\n    <button class=\"clear-button\" mat-icon-button (click)=\"clear()\" [disabled]=\"!searchTerm\">\n      <mat-icon aria-label=\"clear button\">close</mat-icon>\n    </button>\n    <div class=\"search-state\">{{searchState}}</div>\n  </div>\n  <div class=\"toolbox-items echo-scrollbar\">\n    <mat-spinner *ngIf=\"browser.idle\"></mat-spinner>\n    <mat-nav-list *ngIf=\"!browser.idle\">\n      <mat-list-item *ngFor=\"let d of documents\" (click)=\"browser.navigate(d)\" [ngClass]=\"{'accent':(browser.current||{})._id === d._id}\">\n        <mat-icon *ngIf=\"browser.options.icon\" [ngClass]=\"{'warn-color':!!d._new}\"\n                  aria-label=\"current scenario\">{{browser.options.icon}}</mat-icon>\n        <span class=\"browser-item-content\">{{d[browser.options.namePrp]||d._id}}<span class=\"new-element\" *ngIf=\"d._new\"> (new)</span></span>\n        <div *ngIf=\"browser.options.description\" class=\"browser-item-description\">{{browser.options.description(d)}}</div>\n      </mat-list-item>\n    </mat-nav-list>\n  </div>\n</div>\n"
 
 /***/ }),
 
@@ -638,18 +638,23 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var BrowserComponent = (function () {
     function BrowserComponent(browser) {
         this.browser = browser;
+        this.searchState = '';
         this.documents = [];
         var self = this;
         self.browser.onChanged = function () { return self.refresh(); };
     }
     BrowserComponent.prototype.clear = function () {
         this.searchTerm = '';
+        this.searchState = '' + (this.documents || []).length;
         this.refresh();
     };
     BrowserComponent.prototype.refresh = function () {
         var _this = this;
         var rgx = this.searchTerm ? new RegExp(this.searchTerm, 'i') : null;
         this.documents = rgx ? __WEBPACK_IMPORTED_MODULE_2_lodash___default.a.filter(this.browser.documents, function (d) { return rgx.test(d[_this.browser.options.namePrp || 'name']); }) : this.browser.documents;
+        var n = (this.documents || []).length;
+        var N = (this.browser.documents || []).length;
+        this.searchState = (N !== n) ? n + '/' + N : '' + n;
     };
     BrowserComponent.prototype.ngOnInit = function () {
     };
