@@ -60,7 +60,7 @@
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 15);
+/******/ 	return __webpack_require__(__webpack_require__.s = 16);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -416,6 +416,8 @@ function _random(min, max, o) {
   return (cll) ? cll[rnv] : rnv;
 }
 
+exports.random = _random;
+
 function _randomValue(o) {
   switch(o.type) {
     case 'integer':
@@ -630,6 +632,8 @@ const settings = {
   logPath: _checkPath(process.env.ECHO_LOG),
   // Store path for scenarios
   storePath: _checkPath(process.env.ECHO_STORE),
+  // Store path for walking-data
+  walkingPath: _checkPath(process.env.ECHO_WALKING),
   // Reporting path
   reportingPath: '',
   // Token expires in minutes
@@ -675,122 +679,17 @@ module.exports = require("fs");
 
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
-const fs = __webpack_require__(5);
-const path = __webpack_require__(3);
-const u = __webpack_require__(1);
-const config = __webpack_require__(2);
-const socket = __webpack_require__(11);
-const SEPARATOR = '¶';
-const log_folder = config.logPath || (u.release ? config.serverPath : path.join(__dirname, 'data'));
-
-// INIT
-var _starton = new Date();
-var _file_id = '';
-var _log_file = '';
-
-function _zz(v) {
-  return (v < 10) ? '0' + v : '' + v;
-}
-function _fileId(dt) {
-  const M = dt.getMonth() + 1;
-  const D = dt.getDate();
-  return dt.getFullYear() + _zz(M) + _zz(D);
-}
-
-function _init() {
-  _file_id = _fileId(_starton);
-  _log_file = path.join(log_folder, 'echo-' + _file_id + '.log');
-}
-_init();
-
-function _checkFile() {
-  const now = new Date();
-  if (_fileId(now) !== _file_id) {
-    _starton = now;
-    _init();
-  }
-  return now;
-}
-
-
-function _update(item) {
-  const now = _checkFile();
-  const logstr = '\n[' + now.toLocaleTimeString() + ' - ' + item.type + '] ' + item.verb + ': ' + item.message + SEPARATOR;
-  if ((config.log||{}).file === true) {
-    fs.appendFile(_log_file, logstr, function (err) {
-      if (err) console.error(err);
-    });
-  }
-  console.log('ECHO-SERVICE:LOG ' + logstr, item);
-}
-
-function _insert(o) {
-  o = o  || {};
-  o.time = new Date();
-  o.time_str = o.time.toLocaleTimeString();
-  o.message = o.message || '';
-  o.type = o.type || 'info';
-  o.verb = o.verb || '';
-  socket.events.onLog(o);
-  _update(o);
-}
-
-function _message(verb, item, scenario) {
-  return verb + ' ' + (item||{})._type + ' (' + ((item||{})._id||'unknown') + ') item in scenario ' + ((scenario||{}).name||'unknown');
-}
-
-exports.insert = _insert;
-
-exports.error = function(err, res) {
-  _insert({
-    type: 'error',
-    message: u.getErrorMessage(err),
-    data: err
-  });
-  console.error(err);
-  if (res) u.error(res, err);
-};
-
-exports.element = function(item, isnew, scenario) {
-  const verb = isnew ? 'add' : 'update';
-  _insert({verb:verb, type:item._type, data:item, message:_message(verb,item,scenario)});
-};
-
-exports.delete = function(item, scenario) {
-  const verb = 'delete';
-  _insert({verb:verb, type:item._type, data:item, message:_message(verb,item,scenario)});
-};
-
-exports.get = function(cb) {
-  if (fs.existsSync(_log_file)) {
-    fs.readFile(_log_file, 'utf8', function(err, data) {
-      console.log('log content:', data);
-      cb(err, (data||'').split(SEPARATOR));
-    });
-  } else {
-    cb(null, []);
-  }
-};
-
-/* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\log"))
-
-/***/ }),
-/* 7 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-/* WEBPACK VAR INJECTION */(function(__dirname) {
 const config = __webpack_require__(2);
 const fs = __webpack_require__(5);
 const u = __webpack_require__(1);
 const _ = __webpack_require__(0);
-const io = __webpack_require__(33);
-const Cache = __webpack_require__(34);
-const Log = __webpack_require__(6);
-const commons = __webpack_require__(35);
-const version = __webpack_require__(36);
+const io = __webpack_require__(19);
+const Cache = __webpack_require__(20);
+const Log = __webpack_require__(7);
+const commons = __webpack_require__(21);
+const version = __webpack_require__(22);
 const path = __webpack_require__(3);
-const zip = __webpack_require__(37);
+const zip = __webpack_require__(23);
 
 const DEFAULT_SCENARIO = 'default';
 const CURRENT_JSON = 'current.json';
@@ -1132,15 +1031,15 @@ function _save(scenario, res, cb) {
 }
 
 // applica lo scenario scelto
-function _apply(info, res) {
+function _apply(info, cb) {
   function __update(current) {
     _validateInfo(current);
     _saveFile(current, current_json, function (err) {
-      if (err) return u.error(res, err);
+      if (err) return cb(err);
       const result = _.clone(version.infos);
       _.extend(result, current);
       Cache.refresh();
-      u.ok(res, result);
+      cb(null, result);
     });
   }
   io.onFile(io.storePath, info.folder, SCENARIO_JSON, function (file) {
@@ -1160,13 +1059,38 @@ function _apply(info, res) {
   });
 }
 
+exports.startup = function(cb) {
+  cb = cb || _.noop;
+  const folder_str = _.find(process.argv, function(a) {
+    return _.startsWith(a, 'scenario=');
+  });
+  const folder = (folder_str||'').split('=')[1]||'';
+  if (folder) {
+    _apply({folder:folder}, function(err, resp) {
+      if (err) {
+        console.error(err);
+      } else {
+        console.log('VERSION %s', resp.ver)
+        console.log('STARTED SCENARIO "%s"', (resp.scenario||{}).name || (resp.scenario||{}).folder || 'unknown');
+      }
+      cb();
+    });
+  } else {
+    cb();
+  }
+};
 
 // Applica lo scenario
 exports.apply = function(req, res) {
+  function __res() {
+    return function(err, resp) {
+      err ? u.error(res, err) : u.ok(res, resp);
+    }
+  }
   console.log('SET SCENARIO:', req.body);
   (req.body||{}).folder ?
-    _apply(req.body, res) :
-    _save(req.body, res, function(s){ _apply(s, res); });
+    _apply(req.body, __res()) :
+    _save(req.body, res, function(s){ _apply(s, __res()); });
 };
 
 
@@ -1378,6 +1302,111 @@ exports.download = function(req, res) {
 /* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\scenario"))
 
 /***/ }),
+/* 7 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/* WEBPACK VAR INJECTION */(function(__dirname) {
+const fs = __webpack_require__(5);
+const path = __webpack_require__(3);
+const u = __webpack_require__(1);
+const config = __webpack_require__(2);
+const socket = __webpack_require__(11);
+const SEPARATOR = '¶';
+const log_folder = config.logPath || (u.release ? config.serverPath : path.join(__dirname, 'data'));
+
+// INIT
+var _starton = new Date();
+var _file_id = '';
+var _log_file = '';
+
+function _zz(v) {
+  return (v < 10) ? '0' + v : '' + v;
+}
+function _fileId(dt) {
+  const M = dt.getMonth() + 1;
+  const D = dt.getDate();
+  return dt.getFullYear() + _zz(M) + _zz(D);
+}
+
+function _init() {
+  _file_id = _fileId(_starton);
+  _log_file = path.join(log_folder, 'echo-' + _file_id + '.log');
+}
+_init();
+
+function _checkFile() {
+  const now = new Date();
+  if (_fileId(now) !== _file_id) {
+    _starton = now;
+    _init();
+  }
+  return now;
+}
+
+
+function _update(item) {
+  const now = _checkFile();
+  const logstr = '\n[' + now.toLocaleTimeString() + ' - ' + item.type + '] ' + item.verb + ': ' + item.message + SEPARATOR;
+  if ((config.log||{}).file === true) {
+    fs.appendFile(_log_file, logstr, function (err) {
+      if (err) console.error(err);
+    });
+  }
+  console.log('ECHO-SERVICE:LOG ' + logstr, item);
+}
+
+function _insert(o) {
+  o = o  || {};
+  o.time = new Date();
+  o.time_str = o.time.toLocaleTimeString();
+  o.message = o.message || '';
+  o.type = o.type || 'info';
+  o.verb = o.verb || '';
+  socket.events.onLog(o);
+  _update(o);
+}
+
+function _message(verb, item, scenario) {
+  return verb + ' ' + (item||{})._type + ' (' + ((item||{})._id||'unknown') + ') item in scenario ' + ((scenario||{}).name||'unknown');
+}
+
+exports.insert = _insert;
+
+exports.error = function(err, res) {
+  _insert({
+    type: 'error',
+    message: u.getErrorMessage(err),
+    data: err
+  });
+  console.error(err);
+  if (res) u.error(res, err);
+};
+
+exports.element = function(item, isnew, scenario) {
+  const verb = isnew ? 'add' : 'update';
+  _insert({verb:verb, type:item._type, data:item, message:_message(verb,item,scenario)});
+};
+
+exports.delete = function(item, scenario) {
+  const verb = 'delete';
+  _insert({verb:verb, type:item._type, data:item, message:_message(verb,item,scenario)});
+};
+
+exports.get = function(cb) {
+  if (fs.existsSync(_log_file)) {
+    fs.readFile(_log_file, 'utf8', function(err, data) {
+      console.log('log content:', data);
+      cb(err, (data||'').split(SEPARATOR));
+    });
+  } else {
+    cb(null, []);
+  }
+};
+
+/* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\log"))
+
+/***/ }),
 /* 8 */
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -1387,12 +1416,12 @@ exports.download = function(req, res) {
 var _ = __webpack_require__(0);
 var passport = __webpack_require__(9);
 var config = __webpack_require__(2);
-var jwt = __webpack_require__(12);
-var expressJwt = __webpack_require__(38);
-var compose = __webpack_require__(39);
-var Users = __webpack_require__(13);
+var jwt = __webpack_require__(13);
+var expressJwt = __webpack_require__(39);
+var compose = __webpack_require__(40);
+var Users = __webpack_require__(14);
 var validateJwt = expressJwt({ secret: config.secrets.session });
-var Scenario = __webpack_require__(7);
+var Scenario = __webpack_require__(6);
 
 /**
  * Attaches the user object to the request if authenticated
@@ -1664,24 +1693,49 @@ exports.register = function(socket) {
 
 /***/ }),
 /* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+const _events = {
+  _time: (new Date()).getTime(),
+  onState: function() {
+    console.log('NOT registered events (%s)', _events._time);
+  }
+};
+
+exports.events = _events;
+
+exports.register = function(socket) {
+  _events.onState = function(state) {
+    socket.emit('walkingdata', state);
+    console.log('SOCKET EMIT walkingdata state', state);
+  };
+  console.log('Registered events (%s)', _events._time);
+};
+
+
+/***/ }),
+/* 13 */
 /***/ (function(module, exports) {
 
 module.exports = require("jsonwebtoken");
 
 /***/ }),
-/* 13 */
+/* 14 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
-const jwt = __webpack_require__(12);
-const crypto = __webpack_require__(40);
+const jwt = __webpack_require__(13);
+const crypto = __webpack_require__(41);
 const config = __webpack_require__(2);
 const u = __webpack_require__(1);
 const _ = __webpack_require__(0);
 const path = __webpack_require__(3);
 const USERS_STORE = 'users.json';
-const store = __webpack_require__(41);
+const store = __webpack_require__(42);
 
 const users_store_path = path.join((u.release ? config.serverPath : __dirname), USERS_STORE);
 //
@@ -1848,7 +1902,7 @@ if (_toUpdate) {_update();}
 /* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\user"))
 
 /***/ }),
-/* 14 */
+/* 15 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1857,8 +1911,8 @@ if (_toUpdate) {_update();}
 const _ = __webpack_require__(0);
 // const Log = require('../log/log.controller');
 const u = __webpack_require__(1);
-const URL = __webpack_require__(55);
-const Scenario = __webpack_require__(7);
+const URL = __webpack_require__(57);
+const Scenario = __webpack_require__(6);
 const fs = __webpack_require__(5);
 const path = __webpack_require__(3);
 
@@ -2009,7 +2063,7 @@ module.exports = function(req, res) {
 
 
 /***/ }),
-/* 15 */
+/* 16 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -2019,15 +2073,18 @@ const express = __webpack_require__(4);
 const config = __webpack_require__(2);
 // Setup server
 const app = express();
-const server = __webpack_require__(16).createServer(app);
-const socketio = __webpack_require__(17)(server, {
+const server = __webpack_require__(17).createServer(app);
+const socketio = __webpack_require__(18)(server, {
   serveClient: (config.env !== 'production'),
   path: '/socket.io'
 });
+const Scenario = __webpack_require__(6);
 
-__webpack_require__(18)(socketio);
-__webpack_require__(19)(app);
-__webpack_require__(28)(app);
+__webpack_require__(24)(socketio);
+__webpack_require__(25)(app);
+__webpack_require__(34)(app);
+
+Scenario.startup();
 
 // Start server
 server.listen(config.port, config.ip, function () {
@@ -2039,336 +2096,19 @@ exports = module.exports = app;
 
 
 /***/ }),
-/* 16 */
+/* 17 */
 /***/ (function(module, exports) {
 
 module.exports = require("http");
 
 /***/ }),
-/* 17 */
+/* 18 */
 /***/ (function(module, exports) {
 
 module.exports = require("socket.io");
 
 /***/ }),
-/* 18 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-function _log(message) {
-  const now = new Date();
-  return {
-    time: now,
-    time_str: now.toLocaleTimeString(),
-    type: 'info',
-    message: message
-  };
-}
-
-// When the user disconnects.. perform this
-function onDisconnect(socket) {
-  socket.emit('log', _log('"'+socket.address+'" leave echo!'));
-}
-
-// When the user connects.. perform this
-function onConnect(socket) {
-  // When the client emits 'info', this listens and executes
-  socket.on('info', function (data) {
-    console.info('[%s] %s (by socket)', socket.address, JSON.stringify(data, null, 2));
-  });
-
-  // Insert sockets below
-  __webpack_require__(11).register(socket);
-
-  socket.emit('log', _log('Wellcome "'+socket.address+'" to echo!'));
-}
-
-module.exports = function (socketio) {
-  // socket.io (v1.x.x) is powered by debug.
-  // In order to see all the debug output, set DEBUG (in server/config/local.env.js) to including the desired scope.
-  //
-  // ex: DEBUG: "http*,socket.io:socket"
-
-  // We can authenticate socket.io users and access their token through socket.handshake.decoded_token
-  //
-  // 1. You will need to send the token in `client/components/socket/socket.service.js`
-  //
-  // 2. Require authentication here:
-  // socketio.use(require('socketio-jwt').authorize({
-  //   secret: config.secrets.session,
-  //   handshake: true
-  // }));
-
-  socketio.on('connection', function (socket) {
-    const hs = socket.handshake.address||{};
-    socket.address = hs.address ? hs.address + ':' + hs.port : hs;
-    //console.log('handshake:', socket.handshake);
-
-    socket.connectedAt = new Date();
-    // Call onDisconnect.
-    socket.on('disconnect', function () {
-      onDisconnect(socket);
-      console.info('[SOCKET.IO on %s] DISCONNECTED', socket.address);
-    });
-
-    // Call onConnect.
-    onConnect(socket);
-    console.info('[SOCKET.IO on %s] CONNECTED', socket.address);
-  });
-
-  socketio.on('error', function (err) {
-    console.error(err);
-  });
-};
-
-
-
-/***/ }),
 /* 19 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-const express = __webpack_require__(4);
-const favicon = __webpack_require__(20);
-const morgan = __webpack_require__(21);
-const compression = __webpack_require__(22);
-const bodyParser = __webpack_require__(23);
-const methodOverride = __webpack_require__(24);
-const cookieParser = __webpack_require__(25);
-const errorHandler = __webpack_require__(26);
-const path = __webpack_require__(3);
-const config = __webpack_require__(2);
-const client_path = config.clientPath||'client';
-
-var _counter = 0;
-
-//CORS middleware
-var allowCrossDomain = function(req, res, next) {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  next();
-};
-
-//LOG middleware
-var serverLog = function(req, res, next) {
-  _counter++;
-  console.log('Echo-Service request n°%s [%s %s]',_counter, req.method, req.url);
-  next();
-};
-
-module.exports = function(app) {
-  var env = app.get('env');
-
-  app.set('views', path.join(config.serverPath, 'views'));
-  app.engine('html', __webpack_require__(27).renderFile);
-  app.set('view engine', 'html');
-  app.use(compression());
-
-  app.use(bodyParser.json({limit: '100mb'}));
-  app.use(bodyParser.urlencoded({limit: '100mb', extended: true}));
-
-  app.use(methodOverride());
-  app.use(allowCrossDomain);
-  app.use(cookieParser());
-  app.use(serverLog);
-
-  app.use(express.static(path.join(config.root, client_path)));
-  app.set('appPath', client_path);
-
-  app.use(morgan('dev'));
-  app.use(errorHandler()); // Error handler - has to be last
-};
-
-
-/***/ }),
-/* 20 */
-/***/ (function(module, exports) {
-
-module.exports = require("serve-favicon");
-
-/***/ }),
-/* 21 */
-/***/ (function(module, exports) {
-
-module.exports = require("morgan");
-
-/***/ }),
-/* 22 */
-/***/ (function(module, exports) {
-
-module.exports = require("compression");
-
-/***/ }),
-/* 23 */
-/***/ (function(module, exports) {
-
-module.exports = require("body-parser");
-
-/***/ }),
-/* 24 */
-/***/ (function(module, exports) {
-
-module.exports = require("method-override");
-
-/***/ }),
-/* 25 */
-/***/ (function(module, exports) {
-
-module.exports = require("cookie-parser");
-
-/***/ }),
-/* 26 */
-/***/ (function(module, exports) {
-
-module.exports = require("errorhandler");
-
-/***/ }),
-/* 27 */
-/***/ (function(module, exports) {
-
-module.exports = require("ejs");
-
-/***/ }),
-/* 28 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var errors = __webpack_require__(29);
-
-module.exports = function(app) {
-  app.use('/api', __webpack_require__(30));
-  app.use('/api/scenario', __webpack_require__(32));
-  app.use('/api/data', __webpack_require__(42));
-  app.use('/api/reporting', __webpack_require__(53));
-  app.use(function(req, res, next) {
-    var m = /.*\/api\/test\/((.*)[\?]\??(.*)?|(.*))/.exec(req.url);
-    m ? __webpack_require__(14)(req, res) : next();
-  });
-  app.use('/api/test', __webpack_require__(14));
-  app.use('/auth', __webpack_require__(56));
-  // All undefined asset or api routes should return a 404
-  app.route('/:url(api|auth|components|app|bower_components|assets)/*')
-   .get(errors[404]);
-};
-
-
-/***/ }),
-/* 29 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-/**
- * Error responses
- */
-
-
-
-module.exports[404] = function pageNotFound(req, res) {
-  var viewFilePath = '404';
-  var statusCode = 404;
-  var result = {
-    status: statusCode
-  };
-
-  res.status(result.status);
-  res.render(viewFilePath, function (err) {
-    if (err) { return res.json(result, result.status); }
-
-    res.render(viewFilePath);
-  });
-};
-
-
-/***/ }),
-/* 30 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-const api = __webpack_require__(31);
-const u = __webpack_require__(1);
-const express = __webpack_require__(4);
-const Log = __webpack_require__(6);
-
-var router = express.Router();
-
-
-router.get('/', function(req, res){
-  return u.ok(res, api);
-});
-
-router.get('/log', function(req, res) {
-  Log.get(function(err, items){
-    if (err) {return u.error(res, err);}
-    u.ok(res, items);
-  });
-});
-
-module.exports = router;
-
-
-/***/ }),
-/* 31 */
-/***/ (function(module, exports) {
-
-module.exports = [{"description":"Scenari","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario","description":"Elenco degli scenari disponibili","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/current","description":"Info dello scenario corrente","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/info/:name","description":"Info dello scenario","body":{"name":{"type":"string","description":"Folder dello scenario richiesto"}},"response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/download/:folder","description":"Download scenario","body":{"folder":{"type":"string","description":"Nome del folder dello scenario da scaricare"}},"response":{"type":"file","description":"File compresso dello scenario ({FOLDER-NAME}.zip)"}},{"verb":"post","route":"api/scenario/push","description":"Inserisce documenti in uno scenario","auth":true,"body":{"source":{"type":"array","description":"elenco dei documenti da inserire nello scenario"},"target":{"type":"object","description":"info di scenario target (deve avere almeno la property folder)"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/apply","description":"Applica uno scenario","body":"Se passato il folder applica lo scenario, altrimenti, se è un oggetto, ne crea uno nuovo","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/update","description":"Applica le modifiche allo scenario","body":"Scenario con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/settings","description":"Applica le modifiche alle impostazioni dello scenario","body":"Impostazioni con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/upload","description":"Carica uno scenario sul server","body":"File compresso con i documenti dello scenario (xxx.zip)","response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Documenti","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario/documents/:type*?","description":"Elenco dei documenti dello scenario corrente","body":{"type":{"type":"string","description":"Se definito filtra i documenti per tipologia restituendo il contenuto integralmente"}},"response":{"type":"array","object":{"id":{"type":"string","description":"Identificativo del documento"},"name":{"type":"string","description":"Nome del documento"},"title":{"type":"string","description":"Titolo del documento"},"description":{"type":"string","description":"Descrizione del documento"},"modifiedAt":{"type":"date","description":"Data dell'ultima modifica"},"modifiedBy":{"type":"date","description":"Autore dell'ultima modifica"},"_id":{"type":"string","description":"Identificativo del documento (interno)"},"_type":{"type":"string","description":"Tipologia del documento (interno)"},"_tid":{"type":"string","description":"Identificativo con tipo del documento (interno)"}}}},{"verb":"get","route":"api/scenario/tags","description":"Elenco dei tag sui documenti dello scenario corrente","response":{"type":"array","description":"Elenco dei tag"}},{"verb":"get","route":"api/scenario/document/:id/:type*?","description":"Il singolo documento per id e (opzionale) tipo","body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":{"type":"object","description":"Contenuto del documento in formato json"}},{"verb":"post","route":"api/scenario/save","description":"Salva un documento","auth":true,"body":"Documento da salvare","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/scenario/:id/:type*?","description":"Elimina un documento","auth":true,"body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Dati","baseRoute":"api/data","routes":[{"verb":"get","route":"api/data/providers","description":"Elenco dei providers disponibili","response":{"type":"array","object":{"active":{"type":"bool","description":"Descrive lo stato di attività della connessione"},"enabled":{"type":"bool","description":"Se vero è possibile utilizzare questo provider"},"library":{"type":"string","description":"Nome della libreria"},"name":{"type":"string","description":"Nome del provider"},"code":{"type":"string","description":"Codifica del nome"},"instance":{"type":"object","description":"logic"},"defaultPort":{"type":"number","description":"Porta predefinita"}}}},{"verb":"get","route":"api/data/schema/:id","auth":true,"description":"Schema relativo alla connessione indicata","body":{"id":{"type":"string","description":"Identificativo della connessione"}},"response":{"type":"object","description":"ANSI standard information_schema"}},{"verb":"get","route":"api/data/system","auth":true,"description":"Elenco dei parametri di sistema","response":{"type":"array","object":{"name":{"type":"string","description":"Nome del parametro"},"id":{"type":"string","description":"Identificativo"},"value":{"type":"any","description":"Valore del parametro di sistema"},"dataType":{"type":"string","description":"Tipo dato"}}}},{"verb":"post","route":"api/data/execute","auth":true,"description":"Esecuzione di una query","body":{"id":{"type":"string","description":"Identificativo della query da eseguire"},"parameters":{"type":"array","description":"Elenco dei parametri per l'esecuzione"}},"response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/test/conn","description":"Test della connessione","body":"Documento connection da eseguire","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/data/test/exec","description":"Test della query","body":"Documento query da eseguire","response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/entry","description":"Operazioni di data-entry","body":{"action":{"type":"string","description":"Azione dell'operazione di data-entry"},"datasourceId":{"type":"string","description":"Identificativo della sorgente dati"},"changedFields":{"type":"array","description":"Elenco dei field modificati"},"changedRows":{"type":"array","description":"Elenco dei row modificati"},"originalRows":{"type":"array","description":"Elenco dei row originali"}},"response":{"type":"object","object":{"affected":{"type":"number","description":"Numero degli elementi modificati"},"error":{"type":"string","description":"Errore nell'esecuzione del comando di data-entry"}}}},{"verb":"post","route":"api/data/template","description":"Restituisce il template sql per l'operazione richiesta","body":{"action":{"type":"string","description":"Azione dell'operazione di data-entry"},"connection":{"type":"string","description":"Identificativo della connessione utilizzata"},"columns":{"type":"array","description":"Elenco dei campi"}},"response":{"type":"object","object":{"template":{"type":"string","description":"Il template richiesto"}}}}]},{"description":"Utenti","baseRoute":"api/user","routes":[{"verb":"get","route":"api/user","description":"Elenco degli utenti (solo per ruoli 'admin')","response":{"type":"array","description":"Elenco degli utenti"}},{"verb":"get","route":"api/user/me","description":"Info sull'utente correntemente loggato","response":{"type":"object","description":"Utente corrente"}},{"verb":"get","route":"api/user/:id","description":"Info sull'utente","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":{"type":"string","description":"Profilo dell'utente"}},{"verb":"post","route":"api/user","description":"Crea un nuovo utente (solo per ruoli 'admin')","body":{"name":{"type":"string","description":"Nome dell'utente"},"password":{"type":"string","description":"Password dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/user/:id","description":"Elimina un utente (solo per ruoli 'admin')","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Auth","baseRoute":"auth","routes":[{"verb":"post","route":"auth/local","description":"Autenticazione","response":{"type":"object","description":"Restituisce un oggetto contenente il token se autenticato altrimenti l'errore relativo"}}]},{"description":"LOG","baseRoute":"api/log","routes":[{"verb":"get","route":"api/log","description":"Elenco delle righe di log inserite dall'avvio del servizio nel periodo definito nella configurazione","response":{"type":"array","description":"Elenco delle righe di log"}}]},{"description":"API","baseRoute":"api","routes":[{"verb":"get","route":"api","description":"Elenco delle api di echo-service","response":{"type":"object","description":"Questo documento!"}}]}]
-
-/***/ }),
-/* 32 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-var express = __webpack_require__(4);
-var controller = __webpack_require__(7);
-var auth = __webpack_require__(8);
-
-var router = express.Router();
-
-// elenco deli scenari
-router.get('/', controller.index);
-// elenco dei tags sui documenti
-router.get('/tags', controller.tags);
-// restituisce l'elenco dei documenti (solo info) dello scenario corrente
-// se è specificato il type restituisce l'elenco dei documenti (full) di quel tipo
-router.get('/documents/:type*?', auth.needAuthentication(controller.checkInfo), controller.docs);
-// restituisce le info dello scenario corrente (OK)
-router.get('/current', auth.needAuthentication(controller.checkInfo), controller.info);
-// restituisce il singolo documento
-router.get('/document/:id/:type*?', auth.needAuthentication(controller.checkRead), controller.read);
-// restituisce le info di scenario
-router.get('/info/:name', auth.needAuthentication(controller.checkInfo), controller.info);
-// scarica lo scenario
-router.get('/download/:folder', controller.download);
-
-// salva il documento
-router.post('/save', auth.needAuthentication(controller.checkSaveDoc), controller.saveDoc);
-// applica uno scenario
-router.post('/apply', controller.apply);
-// applica le modifiche ad uno scenario
-router.post('/update', controller.update);
-// salva i documenti nello scenario
-router.post('/push', auth.needAuthentication(controller.checkWrite), controller.push);
-// salva le info di scenario
-router.post('/settings', auth.hasRole('admin'), controller.settings);
-// carica uno scenario
-router.post('/upload', controller.upload);
-
-
-// elimina un documento
-router.delete('/:id/:type*?', auth.needAuthentication(controller.checkDelete), controller.delete);
-
-module.exports = router;
-
-
-/***/ }),
-/* 33 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -2491,7 +2231,7 @@ exports.deleteFile = function(filename, cb) {
 /* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\scenario"))
 
 /***/ }),
-/* 34 */
+/* 20 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -2564,7 +2304,7 @@ exports.update = function(doc, action) {
 
 
 /***/ }),
-/* 35 */
+/* 21 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -2614,16 +2354,17 @@ exports.validate = function(doc, filename) {
 
 
 /***/ }),
-/* 36 */
+/* 22 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 exports.infos = {
-  ver: '3.0.0',
-  notes: 'new server api',
+  ver: '3.0.1',
+  notes: 'scenario on startup',
   history:[{
+    '3.0.0': 'new server api',
     '2.0.52': 'custom calls #1',
     '2.0.51': 'oracle close connection',
     '2.0.50': 'crypto.pbkdf2 without specifying a digest',
@@ -2654,44 +2395,363 @@ exports.infos = {
 
 
 /***/ }),
-/* 37 */
+/* 23 */
 /***/ (function(module, exports) {
 
 module.exports = require("jszip");
 
 /***/ }),
+/* 24 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+function _log(message) {
+  const now = new Date();
+  return {
+    time: now,
+    time_str: now.toLocaleTimeString(),
+    type: 'info',
+    message: message
+  };
+}
+
+// When the user disconnects.. perform this
+function onDisconnect(socket) {
+  socket.emit('log', _log('"'+socket.address+'" leave echo!'));
+}
+
+// When the user connects.. perform this
+function onConnect(socket) {
+  // When the client emits 'info', this listens and executes
+  socket.on('info', function (data) {
+    console.info('[%s] %s (by socket)', socket.address, JSON.stringify(data, null, 2));
+  });
+
+  // Insert sockets below
+  __webpack_require__(11).register(socket);
+  __webpack_require__(12).register(socket);
+
+  socket.emit('log', _log('Wellcome "'+socket.address+'" to echo!'));
+}
+
+module.exports = function (socketio) {
+  // socket.io (v1.x.x) is powered by debug.
+  // In order to see all the debug output, set DEBUG (in server/config/local.env.js) to including the desired scope.
+  //
+  // ex: DEBUG: "http*,socket.io:socket"
+
+  // We can authenticate socket.io users and access their token through socket.handshake.decoded_token
+  //
+  // 1. You will need to send the token in `client/components/socket/socket.service.js`
+  //
+  // 2. Require authentication here:
+  // socketio.use(require('socketio-jwt').authorize({
+  //   secret: config.secrets.session,
+  //   handshake: true
+  // }));
+
+  socketio.on('connection', function (socket) {
+    const hs = socket.handshake.address||{};
+    socket.address = hs.address ? hs.address + ':' + hs.port : hs;
+    //console.log('handshake:', socket.handshake);
+
+    socket.connectedAt = new Date();
+    // Call onDisconnect.
+    socket.on('disconnect', function () {
+      onDisconnect(socket);
+      console.info('[SOCKET.IO on %s] DISCONNECTED', socket.address);
+    });
+
+    // Call onConnect.
+    onConnect(socket);
+    console.info('[SOCKET.IO on %s] CONNECTED', socket.address);
+  });
+
+  socketio.on('error', function (err) {
+    console.error(err);
+  });
+};
+
+
+
+/***/ }),
+/* 25 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+const express = __webpack_require__(4);
+const favicon = __webpack_require__(26);
+const morgan = __webpack_require__(27);
+const compression = __webpack_require__(28);
+const bodyParser = __webpack_require__(29);
+const methodOverride = __webpack_require__(30);
+const cookieParser = __webpack_require__(31);
+const errorHandler = __webpack_require__(32);
+const path = __webpack_require__(3);
+const config = __webpack_require__(2);
+const client_path = config.clientPath||'client';
+
+var _counter = 0;
+
+//CORS middleware
+var allowCrossDomain = function(req, res, next) {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+};
+
+//LOG middleware
+var serverLog = function(req, res, next) {
+  _counter++;
+  console.log('Echo-Service request n°%s [%s %s]',_counter, req.method, req.url);
+  next();
+};
+
+module.exports = function(app) {
+  var env = app.get('env');
+
+  app.set('views', path.join(config.serverPath, 'views'));
+  app.engine('html', __webpack_require__(33).renderFile);
+  app.set('view engine', 'html');
+  app.use(compression());
+
+  app.use(bodyParser.json({limit: '100mb'}));
+  app.use(bodyParser.urlencoded({limit: '100mb', extended: true}));
+
+  app.use(methodOverride());
+  app.use(allowCrossDomain);
+  app.use(cookieParser());
+  app.use(serverLog);
+
+  app.use(express.static(path.join(config.root, client_path)));
+  app.set('appPath', client_path);
+
+  app.use(morgan('dev'));
+  app.use(errorHandler()); // Error handler - has to be last
+};
+
+
+/***/ }),
+/* 26 */
+/***/ (function(module, exports) {
+
+module.exports = require("serve-favicon");
+
+/***/ }),
+/* 27 */
+/***/ (function(module, exports) {
+
+module.exports = require("morgan");
+
+/***/ }),
+/* 28 */
+/***/ (function(module, exports) {
+
+module.exports = require("compression");
+
+/***/ }),
+/* 29 */
+/***/ (function(module, exports) {
+
+module.exports = require("body-parser");
+
+/***/ }),
+/* 30 */
+/***/ (function(module, exports) {
+
+module.exports = require("method-override");
+
+/***/ }),
+/* 31 */
+/***/ (function(module, exports) {
+
+module.exports = require("cookie-parser");
+
+/***/ }),
+/* 32 */
+/***/ (function(module, exports) {
+
+module.exports = require("errorhandler");
+
+/***/ }),
+/* 33 */
+/***/ (function(module, exports) {
+
+module.exports = require("ejs");
+
+/***/ }),
+/* 34 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var errors = __webpack_require__(35);
+
+module.exports = function(app) {
+  app.use('/api', __webpack_require__(36));
+  app.use('/api/scenario', __webpack_require__(38));
+  app.use('/api/data', __webpack_require__(43));
+  app.use('/api/reporting', __webpack_require__(55));
+  app.use(function(req, res, next) {
+    var m = /.*\/api\/test\/((.*)[\?]\??(.*)?|(.*))/.exec(req.url);
+    m ? __webpack_require__(15)(req, res) : next();
+  });
+  app.use('/api/test', __webpack_require__(15));
+  app.use('/auth', __webpack_require__(58));
+  // All undefined asset or api routes should return a 404
+  app.route('/:url(api|auth|components|app|bower_components|assets)/*')
+   .get(errors[404]);
+};
+
+
+/***/ }),
+/* 35 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/**
+ * Error responses
+ */
+
+
+
+module.exports[404] = function pageNotFound(req, res) {
+  var viewFilePath = '404';
+  var statusCode = 404;
+  var result = {
+    status: statusCode
+  };
+
+  res.status(result.status);
+  res.render(viewFilePath, function (err) {
+    if (err) { return res.json(result, result.status); }
+
+    res.render(viewFilePath);
+  });
+};
+
+
+/***/ }),
+/* 36 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+const api = __webpack_require__(37);
+const u = __webpack_require__(1);
+const express = __webpack_require__(4);
+const Log = __webpack_require__(7);
+
+var router = express.Router();
+
+
+router.get('/', function(req, res){
+  return u.ok(res, api);
+});
+
+router.get('/log', function(req, res) {
+  Log.get(function(err, items){
+    if (err) {return u.error(res, err);}
+    u.ok(res, items);
+  });
+});
+
+module.exports = router;
+
+
+/***/ }),
+/* 37 */
+/***/ (function(module, exports) {
+
+module.exports = [{"description":"Scenari","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario","description":"Elenco degli scenari disponibili","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/current","description":"Info dello scenario corrente","response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/info/:name","description":"Info dello scenario","body":{"name":{"type":"string","description":"Folder dello scenario richiesto"}},"response":{"type":"object","object":{"folder":{"type":"string","description":"Nome del folder server dove risiedono i file dello scenario"},"name":{"type":"string","description":"Nome dello scenario"},"auth":{"type":"boolean","description":"Identifica uno scenario con la sicurezza attiva"},"{type}":{"type":"array","description":"Per ogni tipo di documento esiste un array che ne enumera gli identificativi"}}}},{"verb":"get","route":"api/scenario/download/:folder","description":"Download scenario","body":{"folder":{"type":"string","description":"Nome del folder dello scenario da scaricare"}},"response":{"type":"file","description":"File compresso dello scenario ({FOLDER-NAME}.zip)"}},{"verb":"post","route":"api/scenario/push","description":"Inserisce documenti in uno scenario","auth":true,"body":{"source":{"type":"array","description":"elenco dei documenti da inserire nello scenario"},"target":{"type":"object","description":"info di scenario target (deve avere almeno la property folder)"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/apply","description":"Applica uno scenario","body":"Se passato il folder applica lo scenario, altrimenti, se è un oggetto, ne crea uno nuovo","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/update","description":"Applica le modifiche allo scenario","body":"Scenario con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/settings","description":"Applica le modifiche alle impostazioni dello scenario","body":"Impostazioni con le modifiche apportate","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/scenario/upload","description":"Carica uno scenario sul server","body":"File compresso con i documenti dello scenario (xxx.zip)","response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Documenti","baseRoute":"api/scenario","routes":[{"verb":"get","route":"api/scenario/documents/:type*?","description":"Elenco dei documenti dello scenario corrente","body":{"type":{"type":"string","description":"Se definito filtra i documenti per tipologia restituendo il contenuto integralmente"}},"response":{"type":"array","object":{"id":{"type":"string","description":"Identificativo del documento"},"name":{"type":"string","description":"Nome del documento"},"title":{"type":"string","description":"Titolo del documento"},"description":{"type":"string","description":"Descrizione del documento"},"modifiedAt":{"type":"date","description":"Data dell'ultima modifica"},"modifiedBy":{"type":"date","description":"Autore dell'ultima modifica"},"_id":{"type":"string","description":"Identificativo del documento (interno)"},"_type":{"type":"string","description":"Tipologia del documento (interno)"},"_tid":{"type":"string","description":"Identificativo con tipo del documento (interno)"}}}},{"verb":"get","route":"api/scenario/tags","description":"Elenco dei tag sui documenti dello scenario corrente","response":{"type":"array","description":"Elenco dei tag"}},{"verb":"get","route":"api/scenario/document/:id/:type*?","description":"Il singolo documento per id e (opzionale) tipo","body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":{"type":"object","description":"Contenuto del documento in formato json"}},{"verb":"post","route":"api/scenario/save","description":"Salva un documento","auth":true,"body":"Documento da salvare","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/scenario/:id/:type*?","description":"Elimina un documento","auth":true,"body":{"id":{"type":"string","description":"Identificativo del documento"},"type":{"type":"string","description":"(opzionale) Tipologia del documento"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Dati","baseRoute":"api/data","routes":[{"verb":"get","route":"api/data/providers","description":"Elenco dei providers disponibili","response":{"type":"array","object":{"active":{"type":"bool","description":"Descrive lo stato di attività della connessione"},"enabled":{"type":"bool","description":"Se vero è possibile utilizzare questo provider"},"library":{"type":"string","description":"Nome della libreria"},"name":{"type":"string","description":"Nome del provider"},"code":{"type":"string","description":"Codifica del nome"},"instance":{"type":"object","description":"logic"},"defaultPort":{"type":"number","description":"Porta predefinita"}}}},{"verb":"get","route":"api/data/schema/:id","auth":true,"description":"Schema relativo alla connessione indicata","body":{"id":{"type":"string","description":"Identificativo della connessione"}},"response":{"type":"object","description":"ANSI standard information_schema"}},{"verb":"get","route":"api/data/system","auth":true,"description":"Elenco dei parametri di sistema","response":{"type":"array","object":{"name":{"type":"string","description":"Nome del parametro"},"id":{"type":"string","description":"Identificativo"},"value":{"type":"any","description":"Valore del parametro di sistema"},"dataType":{"type":"string","description":"Tipo dato"}}}},{"verb":"post","route":"api/data/execute","auth":true,"description":"Esecuzione di una query","body":{"id":{"type":"string","description":"Identificativo della query da eseguire"},"parameters":{"type":"array","description":"Elenco dei parametri per l'esecuzione"}},"response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/test/conn","description":"Test della connessione","body":"Documento connection da eseguire","response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"post","route":"api/data/test/exec","description":"Test della query","body":"Documento query da eseguire","response":{"type":"object","object":{"rows":{"type":"array","description":"Elenco dei records"},"columns":{"type":"array","description":"Schema dati"},"sql":{"type":"string","description":"SQL eseguito dal provider"},"query":{"type":"object","description":"Documento query eseguita"}}}},{"verb":"post","route":"api/data/entry","description":"Operazioni di data-entry","body":{"action":{"type":"string","description":"Azione dell'operazione di data-entry"},"datasourceId":{"type":"string","description":"Identificativo della sorgente dati"},"changedFields":{"type":"array","description":"Elenco dei field modificati"},"changedRows":{"type":"array","description":"Elenco dei row modificati"},"originalRows":{"type":"array","description":"Elenco dei row originali"}},"response":{"type":"object","object":{"affected":{"type":"number","description":"Numero degli elementi modificati"},"error":{"type":"string","description":"Errore nell'esecuzione del comando di data-entry"}}}},{"verb":"post","route":"api/data/template","description":"Restituisce il template sql per l'operazione richiesta","body":{"action":{"type":"string","description":"Azione dell'operazione di data-entry"},"connection":{"type":"string","description":"Identificativo della connessione utilizzata"},"columns":{"type":"array","description":"Elenco dei campi"}},"response":{"type":"object","object":{"template":{"type":"string","description":"Il template richiesto"}}}}]},{"description":"Utenti","baseRoute":"api/user","routes":[{"verb":"get","route":"api/user","description":"Elenco degli utenti (solo per ruoli 'admin')","response":{"type":"array","description":"Elenco degli utenti"}},{"verb":"get","route":"api/user/me","description":"Info sull'utente correntemente loggato","response":{"type":"object","description":"Utente corrente"}},{"verb":"get","route":"api/user/:id","description":"Info sull'utente","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":{"type":"string","description":"Profilo dell'utente"}},{"verb":"post","route":"api/user","description":"Crea un nuovo utente (solo per ruoli 'admin')","body":{"name":{"type":"string","description":"Nome dell'utente"},"password":{"type":"string","description":"Password dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"},{"verb":"delete","route":"api/user/:id","description":"Elimina un utente (solo per ruoli 'admin')","body":{"id":{"type":"string","description":"Identificativo dell'utente"}},"response":"Niente se ha successo, altrimenti l'errore rilevato"}]},{"description":"Auth","baseRoute":"auth","routes":[{"verb":"post","route":"auth/local","description":"Autenticazione","response":{"type":"object","description":"Restituisce un oggetto contenente il token se autenticato altrimenti l'errore relativo"}}]},{"description":"LOG","baseRoute":"api/log","routes":[{"verb":"get","route":"api/log","description":"Elenco delle righe di log inserite dall'avvio del servizio nel periodo definito nella configurazione","response":{"type":"array","description":"Elenco delle righe di log"}}]},{"description":"API","baseRoute":"api","routes":[{"verb":"get","route":"api","description":"Elenco delle api di echo-service","response":{"type":"object","description":"Questo documento!"}}]}]
+
+/***/ }),
 /* 38 */
-/***/ (function(module, exports) {
-
-module.exports = require("express-jwt");
-
-/***/ }),
-/* 39 */
-/***/ (function(module, exports) {
-
-module.exports = require("composable-middleware");
-
-/***/ }),
-/* 40 */
-/***/ (function(module, exports) {
-
-module.exports = require("crypto");
-
-/***/ }),
-/* 41 */
-/***/ (function(module, exports) {
-
-module.exports = [{"name":"admin","role":"admin","_id":"352bd835-07be-44f1-96e4-c482dc818d6f","salt":"FrVqgAnK5xtotktXoLEqZA==","hashedPassword":"tSH8BOyNI7jaHFN11nEl5z2PfGeQ48p9MQbzbGNXYn28kQ6lI6wKiGwawIi4zt7vB1MY47MYeF6wwpC5j5ukdw=="},{"name":"user","role":"user","_id":"183a62a9-09b8-4fb1-8be4-e5798827c1f6","salt":"7D9F3Q0I7Bw+KbYTzOXHvw==","hashedPassword":"Vv05fT6xuKqtkhRzlaIYnnJTCUzsMgBUCIlCJh9rx8PTuIxvaJR4PJDRPsIG0erWJ4TLIypFEsd2fMOY/aSvsQ=="},{"name":"guest","role":"guest","_id":"24abbdc5-0aa6-4bb5-bdf1-8ab0d0e4bb47","salt":"w/AA+dsIv2qRA20C9B8j7A==","hashedPassword":"ty3o7SYAzZZtkSXhYXW5jKzQRBu/gRtmVK/T5GbAHGAVtBiWKACrfCiqopi3aQTzDbSpZNiRYvhu31k+Pi4EWQ=="}]
-
-/***/ }),
-/* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 var express = __webpack_require__(4);
-var controller = __webpack_require__(43);
+var controller = __webpack_require__(6);
+var auth = __webpack_require__(8);
+
+var router = express.Router();
+
+// elenco deli scenari
+router.get('/', controller.index);
+// elenco dei tags sui documenti
+router.get('/tags', controller.tags);
+// restituisce l'elenco dei documenti (solo info) dello scenario corrente
+// se è specificato il type restituisce l'elenco dei documenti (full) di quel tipo
+router.get('/documents/:type*?', auth.needAuthentication(controller.checkInfo), controller.docs);
+// restituisce le info dello scenario corrente (OK)
+router.get('/current', auth.needAuthentication(controller.checkInfo), controller.info);
+// restituisce il singolo documento
+router.get('/document/:id/:type*?', auth.needAuthentication(controller.checkRead), controller.read);
+// restituisce le info di scenario
+router.get('/info/:name', auth.needAuthentication(controller.checkInfo), controller.info);
+// scarica lo scenario
+router.get('/download/:folder', controller.download);
+
+// salva il documento
+router.post('/save', auth.needAuthentication(controller.checkSaveDoc), controller.saveDoc);
+// applica uno scenario
+router.post('/apply', controller.apply);
+// applica le modifiche ad uno scenario
+router.post('/update', controller.update);
+// salva i documenti nello scenario
+router.post('/push', auth.needAuthentication(controller.checkWrite), controller.push);
+// salva le info di scenario
+router.post('/settings', auth.hasRole('admin'), controller.settings);
+// carica uno scenario
+router.post('/upload', controller.upload);
+
+
+// elimina un documento
+router.delete('/:id/:type*?', auth.needAuthentication(controller.checkDelete), controller.delete);
+
+module.exports = router;
+
+
+/***/ }),
+/* 39 */
+/***/ (function(module, exports) {
+
+module.exports = require("express-jwt");
+
+/***/ }),
+/* 40 */
+/***/ (function(module, exports) {
+
+module.exports = require("composable-middleware");
+
+/***/ }),
+/* 41 */
+/***/ (function(module, exports) {
+
+module.exports = require("crypto");
+
+/***/ }),
+/* 42 */
+/***/ (function(module, exports) {
+
+module.exports = [{"name":"admin","role":"admin","_id":"352bd835-07be-44f1-96e4-c482dc818d6f","salt":"FrVqgAnK5xtotktXoLEqZA==","hashedPassword":"tSH8BOyNI7jaHFN11nEl5z2PfGeQ48p9MQbzbGNXYn28kQ6lI6wKiGwawIi4zt7vB1MY47MYeF6wwpC5j5ukdw=="},{"name":"user","role":"user","_id":"183a62a9-09b8-4fb1-8be4-e5798827c1f6","salt":"7D9F3Q0I7Bw+KbYTzOXHvw==","hashedPassword":"Vv05fT6xuKqtkhRzlaIYnnJTCUzsMgBUCIlCJh9rx8PTuIxvaJR4PJDRPsIG0erWJ4TLIypFEsd2fMOY/aSvsQ=="},{"name":"guest","role":"guest","_id":"24abbdc5-0aa6-4bb5-bdf1-8ab0d0e4bb47","salt":"w/AA+dsIv2qRA20C9B8j7A==","hashedPassword":"ty3o7SYAzZZtkSXhYXW5jKzQRBu/gRtmVK/T5GbAHGAVtBiWKACrfCiqopi3aQTzDbSpZNiRYvhu31k+Pi4EWQ=="}]
+
+/***/ }),
+/* 43 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var express = __webpack_require__(4);
+var controller = __webpack_require__(44);
+var walking = __webpack_require__(54);
 var auth = __webpack_require__(8);
 
 var router = express.Router();
@@ -2702,6 +2762,10 @@ router.get('/providers', controller.providers);
 router.get('/schema/:id', auth.needAuthentication(controller.checkData), controller.schema);
 // restituisce i parametri di sistema
 router.get('/system', auth.needAuthentication(controller.checkData), controller.system);
+// walking run
+router.get('/walking/state', walking.state);
+// walking-data context
+router.get('/walking/info', walking.info);
 
 // restituisce i dati
 router.post('/execute', auth.needAuthentication(controller.checkData), controller.execute);
@@ -2713,23 +2777,35 @@ router.post('/test/exec', controller.test);
 router.post('/entry', controller.entry);
 // template
 router.post('/template', controller.template);
+// walking run
+router.post('/walking/run', walking.run);
+// walking stop
+router.post('/walking/stop', walking.stop);
+// walking upload
+router.post('/walking/upload', walking.upload);
+// walking stop
+router.post('/walking/browse', walking.browse);
 
 module.exports = router;
 
 
+
+
+
+
 /***/ }),
-/* 43 */
+/* 44 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const manager = __webpack_require__(44);
+const manager = __webpack_require__(45);
 const u = __webpack_require__(1);
 const _ = __webpack_require__(0);
-const Log = __webpack_require__(6);
-const Scenario = __webpack_require__(7);
-const QueryParser = __webpack_require__(51);
-const SqlEditor = __webpack_require__(52);
+const Log = __webpack_require__(7);
+const Scenario = __webpack_require__(6);
+const QueryParser = __webpack_require__(52);
+const SqlEditor = __webpack_require__(53);
 const SYS_PARAM_KEY = '5933a09f-d99d-4107-a11b-b0e85e1b8b78';
 var _esecution = 0;
 
@@ -3043,7 +3119,7 @@ exports.template = function(req, res) {
 
 
 /***/ }),
-/* 44 */
+/* 45 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3058,7 +3134,7 @@ const _providers = {
     library: 'mssql',
     name: 'SQL Server',
     code: 'sqlserver',
-    instance: __webpack_require__(45),
+    instance: __webpack_require__(46),
     defaultPort: 1433
   },
   mysql: {
@@ -3067,7 +3143,7 @@ const _providers = {
     library: 'mysql',
     name: 'MySQL',
     code: 'mysql',
-    instance: __webpack_require__(47),
+    instance: __webpack_require__(48),
     defaultPort: 3306
   },
   oracle: {
@@ -3076,8 +3152,17 @@ const _providers = {
     library: 'oracledb',
     name: 'Oracle',
     code: 'oracle',
-    instance: __webpack_require__(49),
+    instance: __webpack_require__(50),
     defaultPort: 1521
+  // },
+  // sqlite: {
+  //   active: true,
+  //   enabled: u.use.resolve('sqlite3'),
+  //   library: 'sqlite3',
+  //   name: 'SQLite',
+  //   code: 'sqlite',
+  //   instance: require('./provider-sqlserver'),
+  //   defaultPort: 0
   // },
   // ibmdb2: {
   //   active: false,
@@ -3122,16 +3207,16 @@ exports.getProvider = function(name, cb) {
 
 
 /***/ }),
-/* 45 */
+/* 46 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var helper = __webpack_require__(46);
+var helper = __webpack_require__(47);
 var _ = __webpack_require__(0);
 var u = __webpack_require__(1);
 var mssql = u.use.resolve('mssql') ? u.use('mssql') : {};
-var Log = __webpack_require__(6);
+var Log = __webpack_require__(7);
 var LOG_PREFIX = '[SQL Server] ';
 var LOG_DATAENTRY_PREFIX = '[DATA-ENTRY SQLSERVER] ';
 
@@ -3471,7 +3556,7 @@ exports.templatize = function(verb, options) {
 
 
 /***/ }),
-/* 46 */
+/* 47 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3641,16 +3726,16 @@ exports.getSqlTypedValue = function(v, type) {
 
 
 /***/ }),
-/* 47 */
+/* 48 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var helper = __webpack_require__(48);
+var helper = __webpack_require__(49);
 var _ = __webpack_require__(0);
 var u = __webpack_require__(1);
 var mysql = u.use.resolve('mysql') ? u.use('mysql') : {};
-var Log = __webpack_require__(6);
+var Log = __webpack_require__(7);
 var LOG_PREFIX = '[MySQL] ';
 var LOG_DATAENTRY_PREFIX = '[DATA-ENTRY MYSQL] ';
 
@@ -3957,7 +4042,7 @@ exports.templatize = function(verb, options) {
 
 
 /***/ }),
-/* 48 */
+/* 49 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -4144,16 +4229,16 @@ exports.getSqlTypedValue = function(v, type) {
 
 
 /***/ }),
-/* 49 */
+/* 50 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const helper = __webpack_require__(50);
+const helper = __webpack_require__(51);
 const _ = __webpack_require__(0);
 const u = __webpack_require__(1);
 var oracle = u.use.resolve('oracledb') ? u.use('oracledb') : {};
-var Log = __webpack_require__(6);
+var Log = __webpack_require__(7);
 var LOG_PREFIX = '[Oracle] ';
 var LOG_DATAENTRY_PREFIX = '[DATA-ENTRY ORACLE] ';
 var _cnnCounter = 0;
@@ -4546,7 +4631,7 @@ exports.templatize = function(verb, options) {
 
 
 /***/ }),
-/* 50 */
+/* 51 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -4770,7 +4855,7 @@ exports.getSqlTypedValue = function(v, type) {
 
 
 /***/ }),
-/* 51 */
+/* 52 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -4991,12 +5076,12 @@ module.exports = QueryParser;
 
 
 /***/ }),
-/* 52 */
+/* 53 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const Scenario = __webpack_require__(7);
+const Scenario = __webpack_require__(6);
 const _ = __webpack_require__(0);
 const DOC_TYPE = 'sqleditor';
 const CONN_TYPE = 'connections';
@@ -5065,14 +5150,208 @@ exports.parse = function(doc) {
 
 
 /***/ }),
-/* 53 */
+/* 54 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/* WEBPACK VAR INJECTION */(function(__dirname) {
+const Scenario = __webpack_require__(6);
+const _ = __webpack_require__(0);
+const u = __webpack_require__(1);
+const socket = __webpack_require__(12);
+const path = __webpack_require__(3);
+const fs = __webpack_require__(5);
+const config = __webpack_require__(2);
+const walking_path = config.walkingPath || (u.release ? path.join(config.serverPath, 'walking') : path.join(__dirname, 'walking'));
+const _state = [];
+var _stop = false;
+var _time = null;
+
+function _insert(o) {
+  if (_stop) return;
+  o = o  || {};
+  const now = new Date();
+  if (_time) o.elapsed = now.getTime() - _time;
+  _time = now.getTime();
+  o.time = _time;
+  o.time_str = now.toLocaleTimeString();
+  o.message = o.message || '';
+  o.type = o.type || 'info';
+  o.verb = o.verb || '';
+  if (o.type === 'end') {
+    const first = _.first(_state) || {};
+    o.total = _time - (first.time || 0);
+  }
+  socket.events.onState(o);
+  // TODO: inserire in log l'item
+  _state.push(o);
+}
+
+
+function __test(message, cb) {
+  const delay = u.random(2000, 5000);
+  setTimeout(function () {
+    if (_stop) return;
+    _insert({message: message});
+    if (cb) cb();
+  }, delay);
+}
+
+function _execSource(source, o) {
+  return function(cb) {
+    if (_stop) return cb();
+    _insert({message: 'running source ' + source.name});
+
+    // TODO: esegue la source....
+    // 1. carica i record o apre un cursore
+    // 2. per ogni record esegue i targets
+
+
+    //////////////////////////////////////////////////////
+    // TEST >>>>>>>>>>>>>>>>>>>>>
+    __test('source "' + source.name + '" done!', cb);
+    // <<<<<<<<<<<<<<<<<<<<<<<<<<
+    //////////////////////////////////////////////////////
+  }
+}
+
+function _execStage(stage, o) {
+  return function(cb) {
+    if (_stop) return cb();
+    const index = o.walking.stages.indexOf(stage);
+    _insert({message: 'starting stage n°'+(index+1)});
+    if ((stage.sources||[]).length) {
+      const seq = u.compose();
+      stage.sources.forEach(function(source){
+        seq.use(_execSource(source, o));
+      });
+      seq.run(function() {
+        _insert({message: 'done stage n°'+(index+1)});
+        cb();
+      });
+    } else {
+      _insert({message: 'empty stage', type: 'warning'});
+      cb();
+    }
+  }
+}
+
+
+
+// restituisce lo stato attuale:
+exports.state = function(req, res) {
+  u.ok(res, _state);
+};
+
+// restituisce le info disponibili per gli walking-data:
+// - file uploadati
+// - templates
+exports.info = function(req, res) {
+  return u.error(res, 'Not implemented yet');
+};
+
+// avvia un piano di walking-data
+exports.run = function(req, res) {
+  const options = req.body;
+  const end = _.find(_state, function(s) { return s.type === 'end'; });
+  if (_state.length && !end) return u.error(res, 'Just walking!');
+  if (!options || !options.walking) return u.error(res, 'Undefined walking options!');
+  if (!options.walking._id) return u.error(res, 'Undefined walking-data object!');
+  if (!(options.walking.stages||[]).length) return u.error(res, 'Empty walking-data document!');
+  _time = null;
+  options.result = {};
+  // console.log('WALKING: ', JSON.stringify(options.walking));
+
+  u.ok(res);
+  _stop = false;
+  _state.splice(0);
+  _insert({
+    type:'start',
+    message:options.walking._id
+  });
+  _insert({message: 'Walking-data "' + options.walking.name + '" started...'});
+  const seq = u.compose();
+  options.walking.stages.forEach(function(stage){
+    seq.use(_execStage(stage, options));
+  });
+  seq.run(function() {
+    _insert({type: 'end', result: options.result});
+  });
+};
+
+// interrompe un piano di walking-data
+exports.stop = function(req, res) {
+  if (!_stop) {
+    const end = _.find(_state, function (s) {return s.type === 'end';});
+    if (!end) _insert({type: 'end', message: 'stopped'});
+    _stop = true;
+  }
+  u.ok(200);
+};
+
+// carica documenti per gli walking-data
+exports.upload = function(req, res) {
+  console.log('[WALKING-DATA] upload files', req.files);
+  console.log('[WALKING-DATA] target: %s', walking_path);
+  return u.error(res, 'Not implemented yet');
+
+  /*
+  var data = new Buffer('');
+  req.on('data', function(chunk) {
+    data = Buffer.concat([data, chunk]);
+  });
+  req.on('end', function() {
+    ///
+  });
+  req.on('error', function(err) {
+    u.error(res, err);
+  });
+  */
+};
+
+
+exports.browse = function(req, res) {
+  const options = req.body || {};
+  options.path = options.path || walking_path;
+  switch (options.verb) {
+    case 'back':
+      options.path = path.normalize(path.join(options.path, '..'));
+      break;
+  }
+  fs.readdir(options.path, function (err, files) {
+    const result = {folders:[], files:[]};
+    files.forEach(function(f){
+      const fp = path.join(options.path, f);
+      const stats = fs.statSync(fp);
+      if (stats.isDirectory()) {
+        result.folders.push({
+          name: fp,
+          type: 'folder'
+        });
+      } else if (stats.isFile()) {
+        result.files.push({
+          name: fp,
+          type: 'file',
+          size: stats.size,
+          last: stats.mtime
+        });
+      }
+    });
+    u.ok(200, result);
+  });
+};
+
+/* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\data"))
+
+/***/ }),
+/* 55 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 var express = __webpack_require__(4);
-var controller = __webpack_require__(54);
+var controller = __webpack_require__(56);
 var auth = __webpack_require__(8);
 
 var router = express.Router();
@@ -5092,7 +5371,7 @@ module.exports = router;
 
 
 /***/ }),
-/* 54 */
+/* 56 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -5182,13 +5461,13 @@ exports.saveDocument = function(req, res) {
 /* WEBPACK VAR INJECTION */}.call(exports, "server\\api\\reporting"))
 
 /***/ }),
-/* 55 */
+/* 57 */
 /***/ (function(module, exports) {
 
 module.exports = require("url");
 
 /***/ }),
-/* 56 */
+/* 58 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -5197,24 +5476,24 @@ module.exports = require("url");
 var express = __webpack_require__(4);
 var passport = __webpack_require__(9);
 var config = __webpack_require__(2);
-var User = __webpack_require__(13);
+var User = __webpack_require__(14);
 
 // Passport Configuration
-__webpack_require__(57).setup(User, config);
+__webpack_require__(59).setup(User, config);
 
 var router = express.Router();
 
-router.use('/local', __webpack_require__(59));
+router.use('/local', __webpack_require__(61));
 
 module.exports = router;
 
 
 /***/ }),
-/* 57 */
+/* 59 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var passport = __webpack_require__(9);
-var LocalStrategy = __webpack_require__(58).Strategy;
+var LocalStrategy = __webpack_require__(60).Strategy;
 
 exports.setup = function (User, config) {
   passport.use(new LocalStrategy({
@@ -5241,13 +5520,13 @@ exports.setup = function (User, config) {
 
 
 /***/ }),
-/* 58 */
+/* 60 */
 /***/ (function(module, exports) {
 
 module.exports = require("passport-local");
 
 /***/ }),
-/* 59 */
+/* 61 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
